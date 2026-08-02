@@ -92,6 +92,17 @@ export async function requireAnyPermission(
 }
 
 /**
+ * Filtro "não devolve nada", para papel que não tem acesso ao modelo.
+ *
+ * `{ id: { in: [] } }` e não `{ id: "__sem_acesso__" }`: `id` é UUID, e
+ * comparar com um texto qualquer faz o Postgres estourar 22P02 em vez de
+ * retornar zero linhas — o mesmo modo de falha errado que a migration
+ * `rls_nullif_hardening` corrigiu no RLS (ADR-002). Nunca foi vazamento,
+ * mas erro de banco onde a resposta certa é uma lista vazia.
+ */
+const DENY_ALL = { id: { in: [] as string[] } };
+
+/**
  * Papéis com escopo restrito (proprietário, hóspede, equipe de campo) só
  * enxergam as próprias linhas. Retorna o fragmento de `where` a somar à
  * consulta — permissão sozinha nunca basta para esses papéis
@@ -116,21 +127,21 @@ export function scopeFor(
         case "Reservation":
           return { property: { owner: { userId: actor.userId } } };
         default:
-          return { id: "__sem_acesso__" };
+          return DENY_ALL;
       }
 
     case "guest":
       // Hóspede: só a própria reserva.
       return model === "Reservation"
         ? { primaryGuest: { userId: actor.userId } }
-        : { id: "__sem_acesso__" };
+        : DENY_ALL;
 
     case "cleaning_staff":
     case "maintenance_staff":
       // Equipe de campo: só as próprias tarefas.
       return model === "Task"
         ? { assignedToUserId: actor.userId }
-        : { id: "__sem_acesso__" };
+        : DENY_ALL;
 
     default:
       return {};

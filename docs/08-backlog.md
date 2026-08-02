@@ -17,9 +17,24 @@
   (`requireActorWith`).
 - Telas: `/login`, `/esqueci-senha`, `/redefinir-senha`,
   `/selecionar-empresa`, `/dashboard`.
+- CRUD de imóveis e unidades (`/imoveis`, `/imoveis/novo`,
+  `/imoveis/[id]`, `/imoveis/[id]/unidades/*`) com busca, filtro por
+  situação, comodidades, arquivamento e auditoria. Navegação principal
+  filtrada por permissão.
+- Configuração de pagamento validada (Stripe + Asaas), sem adapter de
+  cobrança ainda.
 
-**Próximo**: CRUD de imóveis/unidades, calendário de disponibilidade,
-motor de preço no servidor e fluxo de reserva com pagamento.
+**Próximo**: calendário de disponibilidade, planos de tarifa e tarifas
+diárias, motor de preço no servidor, fluxo de reserva com pagamento.
+
+**Dívidas deste ciclo**
+- UC-010 previa um assistente de 6 passos com rascunho por etapa; o que
+  existe é um formulário único que salva como `DRAFT`. O rascunho
+  funciona, o passo-a-passo não.
+- Mídia/fotos de imóvel (`Media`) não tem UI — depende de S3/MinIO
+  provisionado.
+- "Excluir" imóvel/unidade é **arquivar**, nunca apagar: reservas,
+  pagamentos e auditoria apontam para eles.
 
 ## MVP (este ciclo — fundação + fluxo vertical)
 Tenant, User, Role, Permission, Membership, Property, Unit, Amenity,

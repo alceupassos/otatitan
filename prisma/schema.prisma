@@ -237,12 +237,17 @@ model Owner {
   @@schema("otatitan")
 }
 
+// POUSADA e CHALE não são traduções de nada em inglês — são categorias
+// próprias do mercado brasileiro de temporada, que é o mercado do produto.
+// Sem elas, metade do litoral e da serra cai em "OTHER".
 enum PropertyType {
   APARTMENT
   HOUSE
   CONDO
   FLAT
   ROOM
+  POUSADA
+  CHALE
   OTHER
 
   @@schema("otatitan")

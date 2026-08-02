@@ -23,6 +23,13 @@ psql -v ON_ERROR_STOP=1 \
   --set owner_password="$OWNER_PASSWORD" \
   --set app_password="$APP_PASSWORD" \
   --set platform_password="$PLATFORM_PASSWORD" <<'EOSQL'
+-- Extensões primeiro, como superusuário: CREATE EXTENSION exige CREATE na
+-- database, que otatitan_owner não tem (e não deve ter — ele é dono do
+-- schema, não da database). A migration booking_integrity tem
+-- `CREATE EXTENSION IF NOT EXISTS btree_gist`, que vira no-op silencioso
+-- porque a extensão já existe aqui; sem isto, ela falha com 42501.
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
 -- otatitan_owner:    dono do schema, roda migrations (DDL), bypassa RLS.
 -- otatitan_app:      role de runtime da aplicação. Sem BYPASSRLS, não é dona das tabelas.
 -- otatitan_platform: usada só pelo cliente de plataforma/superadmin, sempre auditada.

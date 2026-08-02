@@ -1,0 +1,53 @@
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: otatitan
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_dev_only
+    ports:
+      - "5442:5432"
+    volumes:
+      - otatitan-pgdata:/var/lib/postgresql
+      - ./scripts/db-roles.sql:/docker-entrypoint-initdb.d/01-db-roles.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6389:6379"
+    volumes:
+      - otatitan-redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: otatitan
+      MINIO_ROOT_PASSWORD: otatitan_dev_secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - otatitan-miniodata:/data
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+volumes:
+  otatitan-pgdata:
+  otatitan-redisdata:
+  otatitan-miniodata:

@@ -1,0 +1,922 @@
+// Schema do Otatitan. Ver docs/10-modelo-dados.md para o desenho completo
+// (implementado + entidades futuras) e docs/09-arquitetura.md para as
+// decisões (ADRs) por trás do isolamento multi-tenant e da constraint
+// anti-overbooking.
+//
+// Convenção obrigatória para TODA tabela tenant-scoped: campo `tenantId`,
+// `@@schema("otatitan")`, e toda unique constraint prefixada por
+// `tenantId`. Verificado mecanicamente por scripts/check-tenant-columns.ts.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["otatitan"]
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Plataforma (NÃO tenant-scoped)
+// ─────────────────────────────────────────────────────────────────────────
+
+enum TenantStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+
+  @@schema("otatitan")
+}
+
+model Tenant {
+  id              String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  slug            String       @unique
+  name            String
+  legalName       String?
+  taxId           String? // CNPJ
+  status          TenantStatus @default(TRIAL)
+  timezone        String       @default("America/Sao_Paulo")
+  defaultCurrency String       @default("BRL") @db.Char(3)
+  locale          String       @default("pt-BR")
+  permVersion     Int          @default(1)
+  createdAt       DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime     @updatedAt @db.Timestamptz(3)
+  deletedAt       DateTime?    @db.Timestamptz(3)
+
+  memberships Membership[]
+  roles       Role[]
+
+  @@schema("otatitan")
+}
+
+model User {
+  id                  String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  email               String    @unique
+  emailVerified       DateTime? @db.Timestamptz(3)
+  name                String
+  passwordHash        String?
+  image               String?
+  isSuperadmin        Boolean   @default(false)
+  mfaEnabled          Boolean   @default(false)
+  mfaSecretEnc        String?
+  mfaRecoveryCodesEnc String?
+  mfaEnrolledAt       DateTime? @db.Timestamptz(3)
+  lastLoginAt         DateTime? @db.Timestamptz(3)
+  failedLoginCount    Int       @default(0)
+  lockedUntil         DateTime? @db.Timestamptz(3)
+  createdAt           DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt           DateTime? @db.Timestamptz(3)
+
+  memberships         Membership[]
+  accounts            Account[]
+  sessions            Session[]
+  passwordResetTokens PasswordResetToken[]
+
+  @@schema("otatitan")
+}
+
+// Formato exigido pelo @auth/prisma-adapter — mantido mesmo com sessão
+// via JWT, para permitir OAuth/magic-link no futuro sem migration destrutiva.
+model Account {
+  userId            String  @db.Uuid
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+  @@schema("otatitan")
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String   @db.Uuid
+  expires      DateTime @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@schema("otatitan")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime @db.Timestamptz(3)
+
+  @@id([identifier, token])
+  @@schema("otatitan")
+}
+
+model PasswordResetToken {
+  id          String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId      String    @db.Uuid
+  tokenHash   String    @unique
+  expiresAt   DateTime  @db.Timestamptz(3)
+  usedAt      DateTime? @db.Timestamptz(3)
+  requestedIp String?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@schema("otatitan")
+}
+
+model Permission {
+  id          String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  code        String @unique // "modulo.acao", ex: "reservations.create"
+  module      String
+  action      String
+  description String
+
+  rolePermissions RolePermission[]
+
+  @@schema("otatitan")
+}
+
+// tenantId nulo = papel-template de sistema (clonado para cada novo tenant).
+model Role {
+  id          String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId    String?  @db.Uuid
+  slug        String
+  name        String
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  tenant          Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rolePermissions RolePermission[]
+  memberships     Membership[]
+
+  @@unique([tenantId, slug])
+  @@schema("otatitan")
+}
+
+model RolePermission {
+  roleId       String @db.Uuid
+  permissionId String @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@schema("otatitan")
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+
+  @@schema("otatitan")
+}
+
+// O pivô que permite 1 humano pertencer a vários tenants (equipe de
+// agência, proprietário com contas em mais de uma administradora).
+model Membership {
+  id         String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId     String           @db.Uuid
+  tenantId   String           @db.Uuid @default(dbgenerated("(nullif(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid"))
+  roleId     String           @db.Uuid
+  status     MembershipStatus @default(INVITED)
+  invitedAt  DateTime         @default(now()) @db.Timestamptz(3)
+  acceptedAt DateTime?        @db.Timestamptz(3)
+  createdAt  DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime         @updatedAt @db.Timestamptz(3)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id])
+
+  @@unique([userId, tenantId])
+  @@index([tenantId, roleId])
+  @@schema("otatitan")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Tenant-scoped
+// ─────────────────────────────────────────────────────────────────────────
+
+enum OwnerType {
+  INDIVIDUAL
+  COMPANY
+
+  @@schema("otatitan")
+}
+
+// Mínimo necessário como FK de Property neste ciclo — ManagementContract/
+// Payout/OwnerStatement completos ficam para v2 (docs/10-modelo-dados.md).
+model Owner {
+  id        String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId  String    @db.Uuid @default(dbgenerated("(nullif(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid"))
+  name      String
+  type      OwnerType @default(INDIVIDUAL)
+  email     String?
+  phone     String?
+  taxIdEnc  String?
+  userId    String?   @db.Uuid
+  notes     String?
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+
+  properties Property[]
+
+  @@index([tenantId, name])
+  @@schema("otatitan")
+}
+
+enum PropertyType {
+  APARTMENT
+  HOUSE
+  CONDO
+  FLAT
+  ROOM
+  OTHER
+
+  @@schema("otatitan")
+}
+
+enum PropertyStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+
+  @@schema("otatitan")
+}
+
+model Property {
+  id            String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId      String         @db.Uuid @default(dbgenerated("(nullif(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid"))
+  ownerId       String?        @db.Uuid
+  name          String
+  slug          String
+  type          PropertyType   @default(APARTMENT)
+  description   String?        @db.Text
+  status        PropertyStatus @default(DRAFT)
+  addressLine1  String?
+  addressLine2  String?
+  neighborhood  String?
+  city          String?
+  state         String?        @db.Char(2)
+  postalCode    String?
+  country       String         @default("BR")
+  latitude      Decimal?       @db.Decimal(9, 6)
+  longitude     Decimal?       @db.Decimal(9, 6)
+  timezone      String         @default("America/Sao_Paulo")
+  checkInTime   String         @default("15:00")
+  checkOutTime  String         @default("11:00")
+  houseRules    String?        @db.Text
+  createdById   String?        @db.Uuid
+  createdAt     DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime       @updatedAt @db.Timestamptz(3)
+  archivedAt    DateTime?      @db.Timestamptz(3)
+
+  owner        Owner?        @relation(fields: [ownerId], references: [id])
+  units        Unit[]
+  reservations Reservation[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, slug])
+  @@index([tenantId, status])
+  @@index([tenantId, city])
+  @@schema("otatitan")
+}
+
+enum UnitStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+
+  @@schema("otatitan")
+}
+
+model Unit {
+  id               String     @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId         String     @db.Uuid @default(dbgenerated("(nullif(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid"))
+  propertyId       String     @db.Uuid
+  name             String
+  internalCode     String
+  maxGuests        Int
+  bedrooms         Int        @default(0)
+  beds             Int        @default(0)
+  bathrooms        Decimal    @default(1) @db.Decimal(3, 1)
+  sizeM2           Int?
+  floor            String?
+  status           UnitStatus @default(DRAFT)
+  baseRateCents    Int?
+  cleaningFeeCents Int        @default(0)
+  minNights        Int        @default(1)
+  maxNights        Int?
+  currency         String     @default("BRL") @db.Char(3)
+  createdAt        DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime   @updatedAt @db.Timestamptz(3)
+  archivedAt       DateTime?  @db.Timestamptz(3)
+
+  property           Property             @relation(fields: [tenantId, propertyId], references: [tenantId, id])
+  amenities          UnitAmenity[]
+  ratePlans          RatePlan[]
+  dailyRates         DailyRate[]
+  availabilityBlocks AvailabilityBlock[]
+  reservations       Reservation[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, propertyId, internalCode])
+  @@index([tenantId, propertyId, status])
+  @@schema("otatitan")
+}
+
+enum AmenityCategory {
+  ESSENTIALS
+  KITCHEN
+  OUTDOOR
+  LEISURE
+  ACCESSIBILITY
+  SAFETY
+  OTHER
+
+  @@schema("otatitan")
+}
+
+// tenantId nulo = item de catálogo global (compartilhado entre tenants).
+model Amenity {
+  id       String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId String?         @db.Uuid
+  slug     String
+  name     String
+  category AmenityCategory @default(OTHER)
+  icon     String?
+
+  units UnitAmenity[]
+
+  @@unique([tenantId, slug])
+  @@schema("otatitan")
+}
+
+model UnitAmenity {
+  tenantId  String  @db.Uuid @default(dbgenerated("(nullif(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid"))
+  unitId    String  @db.Uuid
+  amenityId String  @db.Uuid
+  notes     String?
+
+  unit    Unit    @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  amenity Amenity @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@id([unitId, amenityId])
+  @@schema("otatitan")
+}
+
+enum MediaOwnerType {
+  PROPERTY
+  UNIT
+  GUEST
+  RESERVATION
+  TASK
+  DOCUMENT
+
+  @@schema("otatitan")
+}
+
+enum MediaVisibility {
+  PRIVATE
+  PUBLIC_READ
+
+  @@schema("otatitan")
+}
+
+enum ScanStatus {
+  PENDING
+  CLEAN
+  INFECTED
+  SKIPPED
+
+  @@schema("otatitan")
+}
+
+model Media {
+  id             String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId       String          @db.Uuid @default(dbgenerated("(nullif(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid"))
+  ownerType      MediaOwnerType
+  ownerId        String          @db.Uuid
+  bucket         String
+  storageKey     String          @unique
+  mimeType       String
+  sizeBytes      Int
+  width          Int?
+  height         Int?
+  checksumSha256 String?
+  visibility     MediaVisibility @default(PRIVATE)
+  scanStatus     ScanStatus      @default(PENDING)
+  sortOrder      Int             @default(0)
+  isCover        Boolean         @default(false)
+  altText        String?
+  uploadedById   String?         @db.Uuid
+  createdAt      DateTime        @default(now()) @db.Timestamptz(3)
+
+  @@index([tenantId, ownerType, ownerId, sortOrder])
+  @@schema("otatitan")
+}
+
+enum DocumentType {
+  CPF
+  PASSPORT
+  RG
+  OTHER
+
+  @@schema("otatitan")
+}
+
+model Guest {
+  id                String        @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId          String        @db.Uuid @default(dbgenerated("(nullif(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid"))
+  firstName         String
+  lastName          String
+  email             String?
+  phone             String?
+  documentType      DocumentType?
+  documentNumberEnc String?
+  documentLast4     String?
+  birthDate         DateTime?     @db.Date
+  nationality       String?
+  country           String        @default("BR")
+  notes             String?
+  userId            String?       @db.Uuid
+  marketingOptIn    Boolean       @default(false)
+  createdAt         DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime      @updatedAt @db.Timestamptz(3)
+  deletedAt         DateTime?     @db.Timestamptz(3)
+
+  reservations        ReservationGuest[]
+  primaryReservations Reservation[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, email])
+  @@index([tenantId, lastName, firstName])
+  @@index([tenantId, phone])
+  @@schema("otatitan")
+}
+
+enum RatePlanStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+
+  @@schema("otatitan")
+}
+
+enum CancellationPolicy {
+  FLEXIBLE
+  MODERATE
+  STRICT
+  NON_REFUNDABLE
+
+  @@schema("otatitan")
+}
+
+model RatePlan {
+  id                  String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId            String             @db.Uuid @default(dbgenerated("(nullif(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid"))
+  unitId              String             @db.Uuid
+  code                String
+  name                String
+  currency            String             @default("BRL") @db.Char(3)
+  isDefault           Boolean            @default(false)
+  status              RatePlanStatus     @default(DRAFT)
+  priority            Int                @default(0)
+  minNights           Int                @default(1)
+  maxNights           Int?
+  minAdvanceDays      Int                @default(0)
+  maxAdvanceDays      Int?
+  includesCleaningFee Boolean            @default(false)
+  cancellationPolicy  CancellationPolicy @default(MODERATE)
+  validFrom           DateTime?          @db.Date
+  validTo             DateTime?          @db.Date
+  createdAt           DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime           @updatedAt @db.Timestamptz(3)
+
+  unit        Unit          @relation(fields: [unitId], references: [id])
+  dailyRates  DailyRate[]
+  reservations Reservation[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, unitId, code])
+  @@index([tenantId, status])
+  @@schema("otatitan")
+}
+
+enum RateSource {
+  MANUAL
+  BULK_EDIT
+  RULE
+  AI_SUGGESTION
+  CHANNEL
+
+  @@schema("otatitan")
+}
+
+model DailyRate {
+  id                String     @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId          String     @db.Uuid @default(dbgenerated("(nullif(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid"))
+  ratePlanId        String     @db.Uuid
+  unitId            String     @db.Uuid
+  date              DateTime   @db.Date
+  priceCents        Int
+  currency          String     @default("BRL") @db.Char(3)
+  minNights         Int?
+  isClosed          Boolean    @default(false)
+  closedToArrival   Boolean    @default(false)
+  closedToDeparture Boolean    @default(false)
+  source            RateSource @default(MANUAL)
+  sourceNote        String?
+  updatedById       String?    @db.Uuid
+  createdAt         DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime   @updatedAt @db.Timestamptz(3)
+
+  ratePlan RatePlan @relation(fields: [ratePlanId], references: [id])
+  unit     Unit     @relation(fields: [unitId], references: [id])
+
+  @@unique([tenantId, ratePlanId, unitId, date])
+  @@index([tenantId, unitId, date])
+  @@schema("otatitan")
+}
+
+enum BlockSource {
+  RESERVATION
+  MANUAL
+  MAINTENANCE
+  OWNER_STAY
+  CHANNEL_SYNC
+
+  @@schema("otatitan")
+}
+
+// Livro-razão único de ocupação (ADR-005): reservas e bloqueios manuais
+// viram linha aqui. A constraint de exclusão GiST (ver migration
+// 0002_booking_integrity) fica sobre esta tabela.
+model AvailabilityBlock {
+  id            String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId      String      @db.Uuid @default(dbgenerated("(nullif(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid"))
+  unitId        String      @db.Uuid
+  startDate     DateTime    @db.Date
+  endDate       DateTime    @db.Date // exclusivo — [startDate, endDate)
+  source        BlockSource
+  isBlocking    Boolean     @default(true)
+  reservationId String?     @unique @db.Uuid
+  reason        String?
+  createdById   String?     @db.Uuid
+  releasedAt    DateTime?   @db.Timestamptz(3)
+  createdAt     DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime    @updatedAt @db.Timestamptz(3)
+
+  unit        Unit         @relation(fields: [unitId], references: [id])
+  reservation Reservation? @relation(fields: [reservationId], references: [id])
+
+  @@index([tenantId, unitId, startDate, endDate])
+  @@schema("otatitan")
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+  NO_SHOW
+
+  @@schema("otatitan")
+}
+
+enum ReservationSource {
+  DIRECT
+  MANUAL
+  WEBSITE
+  CHANNEL
+
+  @@schema("otatitan")
+}
+
+model Reservation {
+  id                  String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId            String            @db.Uuid @default(dbgenerated("(nullif(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid"))
+  code                String
+  propertyId          String            @db.Uuid // denormalizado para listagens
+  unitId              String            @db.Uuid
+  primaryGuestId      String            @db.Uuid
+  ratePlanId          String?           @db.Uuid
+  status              ReservationStatus @default(PENDING)
+  source              ReservationSource @default(DIRECT)
+  checkIn             DateTime          @db.Date
+  checkOut            DateTime          @db.Date
+  nights              Int
+  adults              Int               @default(1)
+  children            Int               @default(0)
+  infants             Int               @default(0)
+  currency            String            @default("BRL") @db.Char(3)
+  nightlyTotalCents   Int
+  feesTotalCents      Int               @default(0)
+  discountsTotalCents Int               @default(0)
+  taxesTotalCents     Int               @default(0)
+  totalCents          Int
+  paidCents           Int               @default(0)
+  quoteSnapshot       Json
+  holdExpiresAt       DateTime?         @db.Timestamptz(3)
+  confirmedAt         DateTime?         @db.Timestamptz(3)
+  cancelledAt         DateTime?         @db.Timestamptz(3)
+  cancellationReason  String?
+  checkedInAt         DateTime?         @db.Timestamptz(3)
+  checkedOutAt        DateTime?         @db.Timestamptz(3)
+  channelReservationId String?
+  internalNotes       String?
+  guestNotes          String?
+  createdById         String?           @db.Uuid
+  createdAt           DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime          @updatedAt @db.Timestamptz(3)
+
+  // FKs compostas (tenantId, x) — camada 1 do isolamento: nem com RLS
+  // desligado e extensão bypassada uma reserva consegue apontar para
+  // imóvel/unidade/hóspede de outro tenant.
+  property           Property            @relation(fields: [tenantId, propertyId], references: [tenantId, id])
+  unit               Unit                @relation(fields: [tenantId, unitId], references: [tenantId, id])
+  primaryGuest        Guest               @relation(fields: [tenantId, primaryGuestId], references: [tenantId, id])
+  ratePlan           RatePlan?           @relation(fields: [ratePlanId], references: [id])
+  guests             ReservationGuest[]
+  payments           Payment[]
+  tasks              Task[]
+  availabilityBlock  AvailabilityBlock?
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@index([tenantId, unitId, checkIn])
+  @@index([tenantId, status, checkIn])
+  @@index([tenantId, primaryGuestId])
+  @@schema("otatitan")
+}
+
+enum ReservationGuestRole {
+  PRIMARY
+  ADDITIONAL
+
+  @@schema("otatitan")
+}
+
+model ReservationGuest {
+  tenantId      String               @db.Uuid @default(dbgenerated("(nullif(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid"))
+  reservationId String               @db.Uuid
+  guestId       String               @db.Uuid
+  role          ReservationGuestRole @default(ADDITIONAL)
+  isPrimary     Boolean              @default(false)
+
+  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  guest       Guest       @relation(fields: [guestId], references: [id])
+
+  @@unique([reservationId, guestId])
+  @@schema("otatitan")
+}
+
+enum PaymentProviderKey {
+  STRIPE
+  MANUAL
+  MERCADOPAGO
+  PAGARME
+
+  @@schema("otatitan")
+}
+
+enum PaymentMethod {
+  CARD
+  PIX
+  BOLETO
+  CASH
+  BANK_TRANSFER
+  OTHER
+
+  @@schema("otatitan")
+}
+
+enum PaymentIntentKind {
+  DEPOSIT
+  BALANCE
+  FULL
+  SECURITY_DEPOSIT
+  EXTRA
+
+  @@schema("otatitan")
+}
+
+enum PaymentStatus {
+  REQUIRES_ACTION
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+
+  @@schema("otatitan")
+}
+
+model Payment {
+  id                String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId          String             @db.Uuid @default(dbgenerated("(nullif(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid"))
+  reservationId     String?            @db.Uuid
+  provider          PaymentProviderKey
+  providerPaymentId String?
+  providerSessionId String?
+  providerCustomerId String?
+  method            PaymentMethod      @default(CARD)
+  intent            PaymentIntentKind  @default(FULL)
+  status            PaymentStatus      @default(PENDING)
+  amountCents       Int
+  currency          String             @default("BRL") @db.Char(3)
+  providerFeeCents  Int?
+  netCents          Int?
+  cardBrand         String?
+  cardLast4         String?
+  receiptUrl        String?
+  description       String?
+  idempotencyKey    String
+  failureCode       String?
+  failureMessage    String?
+  paidAt            DateTime?          @db.Timestamptz(3)
+  createdById       String?            @db.Uuid
+  createdAt         DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime           @updatedAt @db.Timestamptz(3)
+
+  reservation Reservation? @relation(fields: [reservationId], references: [id])
+
+  @@unique([tenantId, idempotencyKey])
+  @@unique([provider, providerPaymentId])
+  @@index([tenantId, reservationId])
+  @@index([tenantId, status])
+  @@schema("otatitan")
+}
+
+enum WebhookEventStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  FAILED
+
+  @@schema("otatitan")
+}
+
+// Idempotência de webhooks recebidos — não faz parte da lista original do
+// briefing, mas é obrigatória para RN-009/replay-safety (docs/11).
+model WebhookEvent {
+  id                String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  provider          PaymentProviderKey
+  eventId           String
+  type              String
+  signatureVerified Boolean
+  payload           Json
+  tenantId          String?            @db.Uuid
+  receivedAt        DateTime           @default(now()) @db.Timestamptz(3)
+  processedAt       DateTime?          @db.Timestamptz(3)
+  status            WebhookEventStatus @default(RECEIVED)
+  attempts          Int                @default(0)
+  error             String?
+
+  @@unique([provider, eventId])
+  @@schema("otatitan")
+}
+
+enum TaskType {
+  CHECK_IN
+  CHECK_OUT
+  CLEANING
+  INSPECTION
+  MAINTENANCE
+  CUSTOM
+
+  @@schema("otatitan")
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  BLOCKED
+  DONE
+  CANCELLED
+
+  @@schema("otatitan")
+}
+
+enum TaskPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+
+  @@schema("otatitan")
+}
+
+model Task {
+  id               String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId         String       @db.Uuid @default(dbgenerated("(nullif(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid"))
+  type             TaskType
+  title            String
+  description      String?
+  status           TaskStatus   @default(OPEN)
+  priority         TaskPriority @default(NORMAL)
+  dueAt            DateTime     @db.Timestamptz(3)
+  propertyId       String?      @db.Uuid
+  unitId           String?      @db.Uuid
+  reservationId    String?      @db.Uuid
+  assignedToUserId String?      @db.Uuid
+  assignedRoleSlug String?
+  dedupeKey        String?
+  completedAt       DateTime?    @db.Timestamptz(3)
+  completedByUserId String?      @db.Uuid
+  createdBySystem  Boolean      @default(false)
+  createdAt        DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime     @updatedAt @db.Timestamptz(3)
+
+  reservation Reservation? @relation(fields: [reservationId], references: [id])
+
+  @@unique([tenantId, dedupeKey])
+  @@index([tenantId, status, dueAt])
+  @@index([tenantId, assignedToUserId, status])
+  @@schema("otatitan")
+}
+
+enum ConsentSubjectType {
+  GUEST
+  USER
+  OWNER
+
+  @@schema("otatitan")
+}
+
+model Consent {
+  id              String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId        String             @db.Uuid @default(dbgenerated("(nullif(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid"))
+  subjectType      ConsentSubjectType
+  subjectId       String             @db.Uuid
+  purpose         String // "terms" | "privacy" | "marketing" | "data_processing"
+  granted         Boolean
+  documentVersion String
+  ip              String?
+  userAgent       String?
+  grantedAt       DateTime           @default(now()) @db.Timestamptz(3)
+  revokedAt       DateTime?          @db.Timestamptz(3)
+
+  @@index([tenantId, subjectType, subjectId, purpose])
+  @@schema("otatitan")
+}
+
+enum ActorType {
+  USER
+  SYSTEM
+  WEBHOOK
+  JOB
+
+  @@schema("otatitan")
+}
+
+// Append-only por design — ver migration que revoga UPDATE/DELETE da role
+// de aplicação (docs/11-seguranca-lgpd.md).
+model AuditLog {
+  id           String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId     String?   @db.Uuid
+  actorType    ActorType
+  actorUserId  String?   @db.Uuid
+  actorLabel   String?
+  action       String // ex: "reservation.created"
+  entityType   String
+  entityId     String?
+  before       Json?
+  after        Json?
+  ip           String?
+  userAgent    String?
+  requestId    String?
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, actorUserId, createdAt])
+  @@schema("otatitan")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Entidades futuras (v2/v3) — NÃO criar tabelas-esqueleto agora.
+// Ver docs/10-modelo-dados.md#entidades-futuras para o desenho completo:
+// ManagementContract, PricingRule, Quote, Refund, SecurityDeposit, Invoice,
+// Expense, Payout, OwnerStatement, Checklist, MaintenanceTicket, Message,
+// MessageTemplate, Notification, Document, Channel, ChannelListing,
+// SyncJob, Automation, InventoryItem, Review, Webhook (outbound),
+// Subscription, FeatureFlag.
+// ─────────────────────────────────────────────────────────────────────────

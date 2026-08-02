@@ -12,7 +12,20 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Cliente do Prisma gerado — recriado por `npm run db:generate`.
+    "src/generated/**",
   ]),
+  {
+    // Código vindo do registry do shadcn (`npx shadcn@latest add`) e
+    // regerado a cada atualização de componente. Não editamos à mão (ver
+    // CLAUDE.md), então não faz sentido falhar o CI por causa dele.
+    // Regra em questão: react-hooks/set-state-in-effect, que o upstream
+    // ainda dispara em carousel/use-mobile.
+    files: ["src/components/ui/**", "src/hooks/use-mobile.ts"],
+    rules: {
+      "react-hooks/set-state-in-effect": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

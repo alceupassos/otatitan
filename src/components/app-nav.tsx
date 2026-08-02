@@ -27,16 +27,22 @@ type Item = {
   label: string;
   icon: typeof Home;
   permission?: PermissionCode;
+  /**
+   * Rota ainda não construída. Fica visível (para dar noção do produto),
+   * mas como texto, não link: um `<Link>` para rota inexistente é um beco
+   * sem saída E gera 404 no prefetch, que suja o console de todo mundo.
+   */
+  emBreve?: boolean;
 };
 
 const ITENS: Item[] = [
   { href: "/dashboard", label: "Painel", icon: LayoutDashboard },
   { href: "/imoveis", label: "Imóveis", icon: Home, permission: "properties.view" },
-  { href: "/calendario", label: "Calendário", icon: CalendarDays, permission: "availability.view" },
-  { href: "/reservas", label: "Reservas", icon: CalendarDays, permission: "reservations.view" },
-  { href: "/tarifas", label: "Tarifas", icon: Tag, permission: "rates.view" },
-  { href: "/tarefas", label: "Tarefas", icon: ListChecks, permission: "tasks.view" },
-  { href: "/configuracoes", label: "Configurações", icon: Settings, permission: "settings.view" },
+  { href: "/calendario", label: "Calendário", icon: CalendarDays, permission: "availability.view", emBreve: true },
+  { href: "/reservas", label: "Reservas", icon: CalendarDays, permission: "reservations.view", emBreve: true },
+  { href: "/tarifas", label: "Tarifas", icon: Tag, permission: "rates.view", emBreve: true },
+  { href: "/tarefas", label: "Tarefas", icon: ListChecks, permission: "tasks.view", emBreve: true },
+  { href: "/configuracoes", label: "Configurações", icon: Settings, permission: "settings.view", emBreve: true },
 ];
 
 export function AppNav({ permissions }: { permissions: string[] }) {
@@ -49,16 +55,33 @@ export function AppNav({ permissions }: { permissions: string[] }) {
 
   return (
     <nav className="flex items-center gap-1 overflow-x-auto" aria-label="Principal">
-      {visiveis.map(({ href, label, icon: Icon }) => {
+      {visiveis.map(({ href, label, icon: Icon, emBreve }) => {
         // `startsWith` para que /imoveis/abc mantenha "Imóveis" marcado.
         const ativo = pathname === href || pathname.startsWith(`${href}/`);
+        const base =
+          "flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors";
+
+        if (emBreve) {
+          return (
+            <span
+              key={href}
+              title="Em construção"
+              aria-disabled="true"
+              className={cn(base, "cursor-default text-muted-foreground/50")}
+            >
+              <Icon className="size-4" />
+              {label}
+            </span>
+          );
+        }
+
         return (
           <Link
             key={href}
             href={href}
             aria-current={ativo ? "page" : undefined}
             className={cn(
-              "flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors",
+              base,
               ativo
                 ? "bg-secondary font-medium text-secondary-foreground"
                 : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",

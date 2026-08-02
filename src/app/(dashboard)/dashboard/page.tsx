@@ -73,7 +73,12 @@ export default async function DashboardPage() {
         properties,
         reservations,
         tasks,
-        revenueCents: revenue?._sum.totalCents ?? null,
+        // `_sum` volta null quando nenhuma linha casa o filtro. Sem o `?? 0`
+        // aqui, "nenhuma reserva ainda" viraria o mesmo valor que "sem
+        // permissão para ver receita", e o cartão desapareceria da tela de
+        // quem tem a permissão — foi o que aconteceu no primeiro acesso em
+        // produção, com o banco vazio.
+        revenueCents: revenue === null ? null : (revenue._sum.totalCents ?? 0),
       };
     },
   );

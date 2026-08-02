@@ -1,0 +1,15 @@
+# Arquivos que o Linux executa precisam de LF, sempre.
+#
+# Sem isto, o autocrlf do Git no Windows grava CRLF na cópia de trabalho,
+# o `git archive` empacota o CRLF junto, e o shebang vira `bash\r` — que
+# o kernel não encontra ("/usr/bin/env: 'bash\r': No such file").
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Configs de servidor e SQL também rodam no Linux.
+*.sql text eol=lf
+infra/nginx/* text eol=lf
+.env.example text eol=lf
+.env.production.example text eol=lf

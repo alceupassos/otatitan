@@ -688,6 +688,7 @@ model ReservationGuest {
 
 enum PaymentProviderKey {
   STRIPE
+  ASAAS
   MANUAL
   MERCADOPAGO
   PAGARME

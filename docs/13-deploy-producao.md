@@ -85,6 +85,29 @@ de se declarar concluído.
   `Referrer-Policy`, `Permissions-Policy`) vêm da aplicação, em
   `next.config.ts`.
 
+## Armadilha: a chave do Asaas começa com `$`
+
+`ASAAS_API_KEY` tem a forma `$aact_prod_...`. O `$` inicial é expandido
+como variável por **dois** consumidores diferentes, e nos dois casos a
+chave vira string vazia **sem nenhum erro**:
+
+- `dotenv-cli` (desenvolvimento) roda `dotenv-expand` *depois* de remover
+  as aspas — então aspas simples não protegem;
+- `set -a; . .env.production` (scripts de deploy) expande no shell.
+
+A única forma que sobrevive aos dois é **aspas duplas com barra
+invertida**:
+
+```sh
+ASAAS_API_KEY="\$aact_prod_..."
+```
+
+`npm run check:payments` confere isso: se a chave não começar com `$`, ele
+acusa expansão de shell em vez de deixar o erro aparecer só na primeira
+cobrança. `npm run check:payments` também recusa chave de produção com
+`ASAAS_SANDBOX=true` (e o inverso), que é o par capaz de movimentar
+dinheiro real por engano.
+
 ## Pendências conhecidas
 
 - [ ] **SMTP real.** Sem `SMTP_URL`, o reset de senha falha em silêncio —

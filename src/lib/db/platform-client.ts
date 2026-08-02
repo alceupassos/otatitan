@@ -14,7 +14,7 @@ function createPlatformClient() {
 }
 
 /**
- * Conecta como otatitan_platform (ver scripts/db-roles.sql) — só a role de
+ * Conecta como otatitan_platform (ver scripts/db-init/01-roles.sh) — só a role de
  * plataforma vê tudo, através de uma política RLS permissiva explícita.
  * Uso restrito a: (1) superadmin/impersonação auditada, (2) o passo
  * inicial do handler de webhook, que grava WebhookEvent antes de resolver

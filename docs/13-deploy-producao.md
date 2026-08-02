@@ -1,27 +1,97 @@
-# 13 — Notas de Deploy em Produção (para quando chegar a hora)
-
-Este documento só é relevante na fase de deploy — não faz parte da
-fundação nem do fluxo vertical deste ciclo.
+# 13 — Deploy em Produção
 
 ## Destino
-- **Domínio**: `otatitan.giannasiadvogados.com.br` (já apontado pelo
-  usuário para o servidor de destino).
-- **Servidor**: acesso via SSH — credenciais em `.env` (`SSH`, `PWD_SSH`),
-  arquivo já no `.gitignore`. **Nunca** copiar essas credenciais para
-  código, documentação versionada ou logs.
 
-## Pendências antes de ir ao ar
-- [ ] Emitir certificado TLS para `otatitan.giannasiadvogados.com.br`
-      (recomendado: Let's Encrypt via Caddy, que renova automaticamente —
-      mesmo padrão citado em `09-arquitetura.md` para o VPS do workspace).
-- [ ] Configurar proxy reverso (Caddy/Nginx) apontando para o container
-      `app` (porta 3040) com terminação TLS + HSTS.
-- [ ] Rotacionar `AUTH_SECRET`, `ENCRYPTION_KEY` e chaves Stripe de teste →
-      produção para fora do `.env`, no cofre de segredos do host.
-- [ ] `prisma migrate deploy` rodando como `otatitan_owner` no banco de
-      produção.
-- [ ] Confirmar `AUTH_URL`/`APP_URL` apontando para
-      `https://otatitan.giannasiadvogados.com.br`.
+- **Domínio**: `otatitan.giannasiadvogados.com.br` (DNS já apontado, via
+  Cloudflare).
+- **Servidor**: `vmi3463690`, Ubuntu (kernel 6.8), Docker 29 + Compose v5.
+  Acesso SSH com credenciais no `.env` (`SSH`, `PWD_SSH`), que está no
+  `.gitignore`. **Nunca** copiar essas credenciais para código,
+  documentação versionada ou logs.
+- **Diretório**: `/opt/otatitan`.
 
-Isso complementa a nota única de produção em `09-arquitetura.md`
-("Produção — nota única, sem over-engineering").
+## O que já existia no servidor (e condicionou o desenho)
+
+- **nginx no host ocupa 80/443** — por isso não há Caddy aqui. O Otatitan
+  entra como mais um site do nginx existente, no mesmo padrão dos outros
+  (`titan.`, `malupop.`, `pitfall.`).
+- **TLS já resolvido**: certificado **Cloudflare Origin curinga** para
+  `*.giannasiadvogados.com.br` em `/etc/ssl/cloudflare/`, válido até 2041.
+  Cobre `otatitan.` sem emitir nada novo — não há Let's Encrypt nem
+  certbot no servidor, e não precisa haver.
+- **Stack vizinho `titan-stay`** roda Postgres 17, Redis e PgBouncer, tudo
+  publicado apenas em `127.0.0.1`. O Otatitan **não** compartilha esse
+  banco: o schema usa `uuidv7()`, que só existe no **Postgres 18**.
+
+## Arquitetura do deploy
+
+```
+Internet → Cloudflare → nginx (host, 443, cert Origin)
+                          └─ proxy_pass → 127.0.0.1:3040
+                                            └─ container `app` (Next standalone)
+                                                 ├─ container `db`    (Postgres 18, sem porta no host)
+                                                 └─ container `redis` (sem porta no host)
+```
+
+Só a aplicação publica porta, e mesmo assim apenas em loopback. Banco e
+Redis não são alcançáveis de fora do compose.
+
+## Primeira instalação
+
+1. **Enviar o código** (não há remote git configurado; o envio é por
+   `tar` + `scp`, ver `scripts/push-to-server.ps1`).
+
+2. **Criar o `.env.production`** em `/opt/otatitan`, a partir de
+   `.env.production.example`, com segredos **novos** — nunca os valores de
+   desenvolvimento:
+
+   ```sh
+   openssl rand -base64 32   # AUTH_SECRET, ENCRYPTION_KEY, senhas do banco
+   chmod 600 .env.production
+   ```
+
+3. **Habilitar o site no nginx**:
+
+   ```sh
+   cp infra/nginx/otatitan.giannasiadvogados.com.br.conf \
+      /etc/nginx/sites-available/otatitan.giannasiadvogados.com.br
+   ln -sf /etc/nginx/sites-available/otatitan.giannasiadvogados.com.br \
+          /etc/nginx/sites-enabled/
+   nginx -t && systemctl reload nginx
+   ```
+
+4. **Subir**: `./scripts/deploy.sh`.
+
+## Atualizações
+
+`./scripts/deploy.sh` é idempotente: reconstrói as imagens, aplica
+migrations pendentes (como `otatitan_owner`), re-roda o seed do catálogo
+(que é idempotente) e reinicia a aplicação, esperando o health check antes
+de se declarar concluído.
+
+## Detalhes que importam
+
+- **O seed de produção não cria dados de demonstração.** Os tenants
+  "Costa Verde" e "Ilha Azul" só nascem com `SEED_DEMO=true`, que o
+  compose de produção nunca define. O que roda lá é o catálogo global
+  (permissões, papéis-template, comodidades), que é pré-requisito do RBAC.
+- **Migrations nunca rodam pela role de runtime.** O serviço `migrate` usa
+  `otatitan_owner` e sai; o `app` depende de `service_completed_successfully`.
+- **`TRUSTED_PROXY=true`** só é correto porque o nginx do host reescreve
+  `X-Forwarded-For`. Sem um proxy confiável na frente, o rate limit por IP
+  passaria a aceitar um header forjado pelo cliente.
+- **HSTS fica no nginx**, onde o TLS termina. Os demais cabeçalhos de
+  segurança (`X-Content-Type-Options`, `X-Frame-Options`,
+  `Referrer-Policy`, `Permissions-Policy`) vêm da aplicação, em
+  `next.config.ts`.
+
+## Pendências conhecidas
+
+- [ ] **SMTP real.** Sem `SMTP_URL`, o reset de senha falha em silêncio —
+      por design, para não revelar quais e-mails existem —, então o link
+      simplesmente nunca chega. Enquanto isso, o acesso depende de senha
+      definida no seed.
+- [ ] **Chaves Stripe de produção.** `PAYMENTS_DEFAULT_PROVIDER=MANUAL`
+      até existirem.
+- [ ] **Backup do volume `pgdata`.** Não há rotina automática.
+- [ ] **MinIO/S3.** O upload de mídia é v2; nenhum bucket foi provisionado.

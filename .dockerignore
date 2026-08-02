@@ -1,0 +1,32 @@
+# Nunca copiar segredos para dentro da imagem — o runtime recebe as
+# variáveis do compose/host, não de um arquivo embutido.
+.env
+.env.*
+!.env.example
+
+node_modules
+.next
+.git
+.github
+
+# Gerado dentro do build por `npx prisma generate`.
+src/generated
+
+tests
+playwright-report
+test-results
+.playwright-mcp
+coverage
+
+docs
+*.md
+!README.md
+
+.vscode
+.idea
+.claude
+pasta
+*.tsbuildinfo
+Dockerfile
+.dockerignore
+docker-compose*.yml

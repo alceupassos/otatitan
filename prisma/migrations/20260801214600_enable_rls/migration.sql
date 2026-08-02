@@ -5,7 +5,7 @@
 -- retorna NULL, a comparação vira NULL (não TRUE) e a política nega tudo
 -- por padrão — zero linhas, nenhuma escrita. FORCE ROW LEVEL SECURITY
 -- garante que isso vale mesmo para o dono da tabela (exceto otatitan_owner,
--- que tem BYPASSRLS por rodar migrations e seeds — ver scripts/db-roles.sql).
+-- que tem BYPASSRLS por rodar migrations e seeds — ver scripts/db-init/01-roles.sh).
 
 -- ── Tabelas tenant-scoped "estritas" (tenantId NOT NULL) ───────────────────
 DO $$

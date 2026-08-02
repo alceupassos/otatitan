@@ -1,0 +1,123 @@
+# Stack de produção do Otatitan (destino: /opt/otatitan no servidor).
+#
+# Diferenças conscientes em relação ao docker-compose.yml de desenvolvimento:
+#
+# - Postgres e Redis NÃO publicam porta no host. Só a aplicação, e mesmo
+#   ela apenas em 127.0.0.1 — quem fala com a internet é o nginx do host,
+#   que já termina TLS com o certificado Cloudflare Origin do domínio.
+# - Postgres 18 (não o 17 do stack vizinho `titan-stay`): o schema usa
+#   `uuidv7()`, que só existe a partir do 18.
+# - As senhas vêm de .env.production, que fica só no servidor (modo 600) e
+#   nunca é versionado.
+# - Um serviço `migrate` roda uma vez, como otatitan_owner, e o `app` só
+#   sobe depois que ele termina — nunca se aplica migration a partir da
+#   role de runtime.
+
+name: otatitan
+
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: otatitan
+      # Superusuário reservado ao bootstrap. A aplicação NUNCA usa esta
+      # conta: FORCE ROW LEVEL SECURITY não vale para superusuário, então
+      # conectar com ela no dia a dia deixaria o RLS inerte.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?defina em .env.production}
+      OTATITAN_OWNER_PASSWORD: ${OTATITAN_OWNER_PASSWORD:?defina em .env.production}
+      OTATITAN_APP_PASSWORD: ${OTATITAN_APP_PASSWORD:?defina em .env.production}
+      OTATITAN_PLATFORM_PASSWORD: ${OTATITAN_PLATFORM_PASSWORD:?defina em .env.production}
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./scripts/db-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d otatitan"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Passo de migration: roda como otatitan_owner (o único papel com DDL) e
+  # sai. `restart: "no"` porque um job que termina não deve ser reiniciado.
+  migrate:
+    build:
+      context: .
+      target: builder
+    image: otatitan-migrate:latest
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_MIGRATE_URL: postgresql://otatitan_owner:${OTATITAN_OWNER_PASSWORD}@db:5432/otatitan?schema=otatitan
+      DATABASE_URL: postgresql://otatitan_owner:${OTATITAN_OWNER_PASSWORD}@db:5432/otatitan?schema=otatitan
+      SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD}
+      # Sem SEED_DEMO: em produção o seed cria só o catálogo global
+      # (permissões, papéis, comodidades), nunca os tenants de exemplo.
+    command: >
+      sh -c "npx prisma migrate deploy && npx tsx prisma/seed.ts"
+
+  app:
+    build:
+      context: .
+    image: otatitan-app:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      APP_URL: ${APP_URL}
+      AUTH_URL: ${APP_URL}
+      AUTH_SECRET: ${AUTH_SECRET:?defina em .env.production}
+      AUTH_TRUST_HOST: "true"
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?defina em .env.production}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+      DATABASE_URL: postgresql://otatitan_app:${OTATITAN_APP_PASSWORD}@db:5432/otatitan?schema=otatitan
+      PLATFORM_DATABASE_URL: postgresql://otatitan_platform:${OTATITAN_PLATFORM_PASSWORD}@db:5432/otatitan?schema=otatitan
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
+
+      REDIS_URL: redis://redis:6379
+      QUEUE_PREFIX: otatitan
+      SESSION_MAX_AGE_SECONDS: ${SESSION_MAX_AGE_SECONDS:-28800}
+      PASSWORD_RESET_TTL_MINUTES: ${PASSWORD_RESET_TTL_MINUTES:-30}
+      MFA_ISSUER: Otatitan
+      RATE_LIMIT_ENABLED: "true"
+      # O nginx do host reescreve X-Forwarded-For, então dá para confiar
+      # nele para identificar o IP de origem no rate limit.
+      TRUSTED_PROXY: "true"
+
+      SMTP_URL: ${SMTP_URL}
+      MAIL_FROM: ${MAIL_FROM}
+
+      PAYMENTS_DEFAULT_PROVIDER: ${PAYMENTS_DEFAULT_PROVIDER:-MANUAL}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+    ports:
+      # Loopback apenas: o container não fica exposto na internet, só o
+      # nginx do host alcança.
+      - "127.0.0.1:3040:3040"
+
+volumes:
+  pgdata:
+  redisdata:

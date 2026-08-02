@@ -1149,6 +1149,26 @@ async function seedTasksForReservation(
 
 // ─────────────────────────────────────────────────────────────────────────
 
+/**
+ * Os tenants de demonstração só são criados quando `SEED_DEMO=true`.
+ *
+ * Em produção o seed ainda é necessário — o catálogo global (permissões,
+ * papéis-template, comodidades) é pré-requisito do RBAC —, mas "Costa
+ * Verde" e "Ilha Azul" não podem existir lá. Por isso o padrão é NÃO
+ * semear demo: em produção esquecer de desligar seria pior do que em dev
+ * esquecer de ligar.
+ */
+const SEED_DEMO = process.env.SEED_DEMO === "true";
+
+/**
+ * Senha do superadmin de plataforma. Em produção vem do ambiente; sem ela,
+ * o usuário é criado sem senha e não consegue entrar por credenciais —
+ * o que é melhor do que semear uma senha conhecida em produção.
+ */
+const SUPERADMIN_EMAIL =
+  process.env.SUPERADMIN_EMAIL ?? "superadmin@otatitan.app";
+const SUPERADMIN_PASSWORD = process.env.SUPERADMIN_PASSWORD;
+
 async function main(): Promise<void> {
   console.log("→ Permissões...");
   const permissionIds = await seedPermissions();
@@ -1162,20 +1182,41 @@ async function main(): Promise<void> {
   const amenityIds = await seedGlobalAmenities();
   console.log(`  ${amenityIds.size} comodidades.`);
 
-  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
+  const superadminHash = SUPERADMIN_PASSWORD
+    ? await bcrypt.hash(SUPERADMIN_PASSWORD, 12)
+    : SEED_DEMO
+      ? await bcrypt.hash(DEMO_PASSWORD, 12)
+      : null;
 
   const superadmin = await db.user.upsert({
-    where: { email: "superadmin@otatitan.app" },
+    where: { email: SUPERADMIN_EMAIL },
+    // `update` não mexe na senha: rodar o seed de novo num banco vivo não
+    // pode redefinir a senha de quem já entrou e trocou a dela.
     update: { isSuperadmin: true },
     create: {
-      email: "superadmin@otatitan.app",
+      email: SUPERADMIN_EMAIL,
       name: "Superadministrador",
-      passwordHash,
+      passwordHash: superadminHash,
       isSuperadmin: true,
       emailVerified: new Date(),
     },
   });
   console.log(`→ Superadmin de plataforma: ${superadmin.email}`);
+  if (!superadminHash) {
+    console.log(
+      "  (sem senha — defina SUPERADMIN_PASSWORD ou use 'esqueci minha senha')",
+    );
+  }
+
+  if (!SEED_DEMO) {
+    console.log(
+      "\nCatálogo global semeado. Dados de demonstração NÃO criados " +
+        "(defina SEED_DEMO=true para incluí-los).",
+    );
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
 
   for (const tenant of TENANTS) {
     console.log(`→ Tenant "${tenant.name}" (${tenant.slug})...`);

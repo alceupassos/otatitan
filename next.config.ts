@@ -8,6 +8,30 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(import.meta.dirname),
   },
+
+  // Empacota só o necessário em .next/standalone (server + deps usados),
+  // o que permite a imagem final de produção não ter node_modules inteiro
+  // nem o código-fonte. Ver Dockerfile.
+  output: "standalone",
+
+  // O proxy reverso (Caddy) termina o TLS; estes cabeçalhos são a parte
+  // que precisa vir da aplicação. HSTS fica no Caddy, junto do TLS.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=()",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

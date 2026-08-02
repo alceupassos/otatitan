@@ -9,7 +9,7 @@ services:
       - "5442:5432"
     volumes:
       - otatitan-pgdata:/var/lib/postgresql
-      - ./scripts/db-roles.sql:/docker-entrypoint-initdb.d/01-db-roles.sql:ro
+      - ./scripts/db-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s

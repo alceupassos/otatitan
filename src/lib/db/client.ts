@@ -14,7 +14,7 @@ function createClient() {
   return new PrismaClient({ adapter });
 }
 
-// Conecta como otatitan_app (ver scripts/db-roles.sql) — sujeita a RLS em
+// Conecta como otatitan_app (ver scripts/db-init/01-roles.sh) — sujeita a RLS em
 // toda tabela tenant-scoped.
 export const basePrisma = globalThis.__otatitanBasePrisma ?? createClient();
 

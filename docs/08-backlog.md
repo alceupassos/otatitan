@@ -28,8 +28,13 @@
   por mês, bloqueio manual (manutenção / uso do proprietário / outro) e
   liberação. Reserva e bloqueio no mesmo livro-razão (ADR-005).
 
-**Próximo**: planos de tarifa e tarifas diárias, motor de preço no
-servidor, fluxo de reserva com pagamento.
+- Tarifas (`/tarifas`, `/tarifas/[unitId]`): planos com política de
+  cancelamento e regras de estadia, publicação de diárias em lote (com
+  filtro por dia da semana), fechamento para venda/chegada/saída, e
+  relatório de cobertura que aponta a primeira lacuna sem tarifa.
+
+**Próximo**: motor de preço no servidor (cotação), busca de
+disponibilidade e fluxo de reserva com pagamento.
 
 **Dívidas deste ciclo**
 - UC-010 previa um assistente de 6 passos com rascunho por etapa; o que

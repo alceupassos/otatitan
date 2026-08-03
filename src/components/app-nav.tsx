@@ -40,7 +40,7 @@ const ITENS: Item[] = [
   { href: "/imoveis", label: "Imóveis", icon: Home, permission: "properties.view" },
   { href: "/calendario", label: "Calendário", icon: CalendarDays, permission: "availability.view" },
   { href: "/reservas", label: "Reservas", icon: CalendarDays, permission: "reservations.view", emBreve: true },
-  { href: "/tarifas", label: "Tarifas", icon: Tag, permission: "rates.view", emBreve: true },
+  { href: "/tarifas", label: "Tarifas", icon: Tag, permission: "rates.view" },
   { href: "/tarefas", label: "Tarefas", icon: ListChecks, permission: "tasks.view", emBreve: true },
   { href: "/configuracoes", label: "Configurações", icon: Settings, permission: "settings.view", emBreve: true },
 ];

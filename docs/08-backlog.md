@@ -24,8 +24,12 @@
 - Configuração de pagamento validada (Stripe + Asaas), sem adapter de
   cobrança ainda.
 
-**Próximo**: calendário de disponibilidade, planos de tarifa e tarifas
-diárias, motor de preço no servidor, fluxo de reserva com pagamento.
+- Calendário de ocupação (`/calendario`): grade unidade × dia, navegação
+  por mês, bloqueio manual (manutenção / uso do proprietário / outro) e
+  liberação. Reserva e bloqueio no mesmo livro-razão (ADR-005).
+
+**Próximo**: planos de tarifa e tarifas diárias, motor de preço no
+servidor, fluxo de reserva com pagamento.
 
 **Dívidas deste ciclo**
 - UC-010 previa um assistente de 6 passos com rascunho por etapa; o que

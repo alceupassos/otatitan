@@ -23,7 +23,8 @@
     "check:tenant-columns": "dotenv -e .env -- tsx scripts/check-tenant-columns.ts",
     "check:payments": "dotenv -e .env -- tsx scripts/check-payments.ts",
     "tenant:create": "dotenv -e .env -- tsx scripts/create-tenant.ts",
-    "tenant:drop": "dotenv -e .env -- tsx scripts/drop-tenant.ts"
+    "tenant:drop": "dotenv -e .env -- tsx scripts/drop-tenant.ts",
+    "property:import": "dotenv -e .env -- tsx scripts/import-property.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^9.1.0",

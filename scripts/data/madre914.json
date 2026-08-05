@@ -1,0 +1,43 @@
+{
+  "_fonte": "angra/madre914/predio/madre914.html — documento de produto v2.0",
+  "_nota": "Diária base, taxa de limpeza, área e capacidade NÃO constam no documento. Ficaram sem valor (ou no mínimo aceito) de propósito — inventar número e apresentar como real seria pior que deixar em branco. Endereço: o documento só informa São Paulo; rua, número e CEP precisam ser confirmados.",
+  "imovel": {
+    "name": "MADRE 914",
+    "type": "CONDO",
+    "status": "DRAFT",
+    "description": "Prédio de 200 apartamentos operado como um único sistema: check-in sem recepção física, serviços sob demanda e entrega interna em menos de 10 minutos. Fase 1 opera 40 apartamentos. Cobertura com rooftop reservável; térreo com hub operacional (dark store, lockers, base de copeira e técnico); portaria com recepção virtual 24/7.",
+    "addressLine1": "",
+    "addressLine2": "",
+    "neighborhood": "",
+    "city": "São Paulo",
+    "state": "SP",
+    "postalCode": "",
+    "checkInTime": "15:00",
+    "checkOutTime": "11:00",
+    "houseRules": "Check-in automático por totem com reconhecimento facial. Fechadura inteligente por reserva. Concierge por vídeo disponível 24/7. SLA de manutenção: 1 hora."
+  },
+  "comodidades": [
+    "wifi",
+    "ar-condicionado",
+    "elevador",
+    "portaria-24h"
+  ],
+  "gerarUnidades": {
+    "andares": [2, 3, 4, 5],
+    "porAndar": 10,
+    "prefixoCodigo": "M914-",
+    "nomeTemplate": "Apartamento {numero}",
+    "padrao": {
+      "status": "DRAFT",
+      "maxGuests": "2",
+      "bedrooms": "1",
+      "beds": "1",
+      "bathrooms": "1",
+      "sizeM2": "",
+      "baseRateCents": "",
+      "cleaningFeeCents": "0",
+      "minNights": "1",
+      "maxNights": ""
+    }
+  }
+}

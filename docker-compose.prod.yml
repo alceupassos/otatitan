@@ -68,6 +68,19 @@ services:
       SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD}
       # Sem SEED_DEMO: em produção o seed cria só o catálogo global
       # (permissões, papéis, comodidades), nunca os tenants de exemplo.
+      #
+      # Esta é a única imagem com o código-fonte e o `tsx` (a `runner` é o
+      # build standalone do Next), então ela também roda os scripts de
+      # conferência — daí as variáveis de pagamento aqui. Sem elas,
+      # `check-payments` reportaria MANUAL mesmo com o Asaas configurado, e
+      # a conferência do deploy daria um falso negativo.
+      PAYMENTS_DEFAULT_PROVIDER: ${PAYMENTS_DEFAULT_PROVIDER:-MANUAL}
+      ASAAS_API_KEY: ${ASAAS_API_KEY:-}
+      ASAAS_SANDBOX: ${ASAAS_SANDBOX:-true}
+      ASAAS_WEBHOOK_TOKEN: ${ASAAS_WEBHOOK_TOKEN:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
     command: >
       sh -c "npx prisma migrate deploy && npx tsx prisma/seed.ts"
 
@@ -113,10 +126,56 @@ services:
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      # Sem estas três o Asaas não chega ao contêiner, e o app sobe com o
+      # provedor manual mesmo que .env.production esteja preenchido: o
+      # botão de cobrar por link recusa e o webhook responde 503 a todo
+      # evento. Preencher o arquivo no servidor não basta — a variável
+      # precisa ser repassada aqui.
+      ASAAS_API_KEY: ${ASAAS_API_KEY:-}
+      ASAAS_SANDBOX: ${ASAAS_SANDBOX:-true}
+      ASAAS_WEBHOOK_TOKEN: ${ASAAS_WEBHOOK_TOKEN:-}
     ports:
       # Loopback apenas: o container não fica exposto na internet, só o
       # nginx do host alcança.
       - "127.0.0.1:3040:3040"
+
+  # Processo de filas. Precisa existir em produção: é ele que devolve ao
+  # calendário a data de um hold vencido (RN-004) e que cria as tarefas de
+  # check-in, check-out e limpeza de cada reserva confirmada (RN-008). Sem
+  # ele, uma reserva não paga segura a data para sempre e a equipe não
+  # recebe nenhuma tarefa.
+  #
+  # Usa o estágio `builder`, como o `migrate`: a imagem `runner` é o build
+  # standalone do Next e contém só `server.js` — não traz `src/worker/`
+  # nem o `tsx` que o executa.
+  #
+  # O comando chama o `tsx` direto em vez de `npm run worker`, porque o
+  # script do package.json carrega `.env` com o dotenv-cli e aqui não há
+  # arquivo nenhum: o ambiente vem deste bloco.
+  worker:
+    build:
+      context: .
+      target: builder
+    image: otatitan-migrate:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: postgresql://otatitan_app:${OTATITAN_APP_PASSWORD}@db:5432/otatitan?schema=otatitan
+      # A varredura de holds é global: descobrir "quais tenants existem" é
+      # pergunta anterior a haver tenant ativo, e cada um é processado
+      # dentro do seu próprio `withTenant`.
+      PLATFORM_DATABASE_URL: postgresql://otatitan_platform:${OTATITAN_PLATFORM_PASSWORD}@db:5432/otatitan?schema=otatitan
+      REDIS_URL: redis://redis:6379
+      QUEUE_PREFIX: otatitan
+    command: ["npx", "tsx", "src/worker/index.ts"]
 
 volumes:
   pgdata:

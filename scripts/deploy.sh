@@ -34,8 +34,12 @@ $COMPOSE build
 echo "→ Aplicando migrations e seed do catálogo..."
 $COMPOSE run --rm migrate
 
-echo "→ Subindo a aplicação..."
-$COMPOSE up -d db redis app
+echo "→ Subindo a aplicação e o worker..."
+# O `worker` entra aqui junto: sem ele, hold vencido nunca devolve a data ao
+# calendário (RN-004) e reserva confirmada não gera tarefa (RN-008). São
+# falhas silenciosas — a aplicação responde normalmente e nada indica que a
+# fila não está sendo consumida.
+$COMPOSE up -d db redis app worker
 
 echo "→ Aguardando health check..."
 # 60 tentativas × 2s = 2 min. O start_period do container já cobre o boot;
@@ -44,6 +48,15 @@ for i in $(seq 1 60); do
   if curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then
     echo "✅ Aplicação saudável em $HEALTH_URL"
     $COMPOSE ps
+
+    # O provedor de pagamento é conferido DEPOIS de subir, e o resultado é
+    # informativo: um erro de chave não deve derrubar um deploy que já está
+    # de pé e atendendo. Mas precisa aparecer, senão só se descobre na
+    # primeira cobrança de um cliente.
+    echo "→ Conferindo a configuração de pagamento..."
+    $COMPOSE run --rm --no-deps migrate npx tsx scripts/check-payments.ts || \
+      echo "⚠  Configuração de pagamento com problema — ver acima." >&2
+
     exit 0
   fi
   sleep 2

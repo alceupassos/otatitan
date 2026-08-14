@@ -29,15 +29,38 @@
  * Depois de pagar (ou desistir), CANCELE a reserva pelo painel: ela segura
  * uma data real até o hold expirar.
  */
+import Module from "node:module";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
-import { withTenant } from "../src/lib/db/with-tenant";
-import { abrirCobranca } from "../src/lib/payments/cobranca";
 import { describePaymentConfig, loadPaymentConfig } from "../src/lib/payments/config";
-import { criarReserva } from "../src/lib/reservations/actions";
 import type { ActorContext } from "../src/lib/rbac/guard";
 import type { RoleSlug } from "../src/lib/rbac/roles";
 import { formatMoney } from "../src/lib/money";
+
+/**
+ * Neutraliza o `server-only` antes de carregar o domínio.
+ *
+ * O pacote real lança ao ser importado fora de um Server Component — que é
+ * o que se quer na aplicação e é exatamente o que impede este script, Node
+ * puro, de usar `criarReserva` e `abrirCobranca`. Os testes resolvem com um
+ * alias no Vitest (`tests/helpers/server-only-stub.ts`); aqui não há
+ * bundler, então o jeito é interceptar a resolução.
+ *
+ * A proteção continua valendo onde importa: no build da aplicação. E o
+ * import do domínio é DINÂMICO logo abaixo de propósito — um `import`
+ * estático é içado para antes deste patch e voltaria a estourar.
+ */
+type CarregadorDeModulo = (this: unknown, pedido: string, ...resto: unknown[]) => unknown;
+const interno = Module as unknown as { _load: CarregadorDeModulo };
+const carregarOriginal = interno._load;
+interno._load = function (this: unknown, pedido: string, ...resto: unknown[]) {
+  if (pedido === "server-only") return {};
+  return carregarOriginal.call(this, pedido, ...resto);
+};
+
+const { withTenant } = await import("../src/lib/db/with-tenant");
+const { abrirCobranca } = await import("../src/lib/payments/cobranca");
+const { criarReserva } = await import("../src/lib/reservations/actions");
 
 function arg(chave: string): string | undefined {
   const i = process.argv.indexOf(`--${chave}`);

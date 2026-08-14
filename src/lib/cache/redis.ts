@@ -8,6 +8,16 @@ declare global {
 let connecting: Promise<RedisClientType> | null = null;
 
 /**
+ * Fonte única da URL do Redis — cache, rate limiting e as filas BullMQ
+ * (`src/lib/queue/connection.ts`). O worker precisa das próprias conexões
+ * (as chamadas bloqueantes do BullMQ não podem dividir socket com o
+ * cache), mas o endereço tem que ser um só.
+ */
+export function redisUrl(): string {
+  return process.env.REDIS_URL ?? "redis://localhost:6389";
+}
+
+/**
  * Cliente Redis compartilhado. Usado para cache de permissões e rate
  * limiting — nunca como fonte de verdade.
  */
@@ -16,9 +26,7 @@ export async function getRedis(): Promise<RedisClientType> {
   if (connecting) return connecting;
 
   connecting = (async () => {
-    const client = createClient({
-      url: process.env.REDIS_URL ?? "redis://localhost:6389",
-    }) as RedisClientType;
+    const client = createClient({ url: redisUrl() }) as RedisClientType;
 
     client.on("error", (err) => {
       logger.warn({ err: err.message }, "Erro no cliente Redis");

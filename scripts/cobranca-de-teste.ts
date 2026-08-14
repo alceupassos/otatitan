@@ -58,9 +58,19 @@ interno._load = function (this: unknown, pedido: string, ...resto: unknown[]) {
   return carregarOriginal.call(this, pedido, ...resto);
 };
 
-const { withTenant } = await import("../src/lib/db/with-tenant");
-const { abrirCobranca } = await import("../src/lib/payments/cobranca");
-const { criarReserva } = await import("../src/lib/reservations/actions");
+/**
+ * Os imports do domínio ficam DENTRO da função: precisam acontecer depois
+ * do patch acima, e `await` no topo do arquivo não compila aqui (o tsx
+ * emite CJS, porque o projeto não declara `"type": "module"`).
+ */
+async function carregarDominio() {
+  const [{ withTenant }, { abrirCobranca }, { criarReserva }] = await Promise.all([
+    import("../src/lib/db/with-tenant"),
+    import("../src/lib/payments/cobranca"),
+    import("../src/lib/reservations/actions"),
+  ]);
+  return { withTenant, abrirCobranca, criarReserva };
+}
 
 function arg(chave: string): string | undefined {
   const i = process.argv.indexOf(`--${chave}`);
@@ -99,6 +109,8 @@ async function main() {
         ".env.production (ver .env.production.example) e suba de novo.",
     );
   }
+
+  const { withTenant, abrirCobranca, criarReserva } = await carregarDominio();
 
   const adapter = new PrismaPg({ connectionString: process.env.DATABASE_MIGRATE_URL });
   const db = new PrismaClient({ adapter });

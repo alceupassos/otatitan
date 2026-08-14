@@ -29,7 +29,22 @@ export async function getRedis(): Promise<RedisClientType> {
     const client = createClient({ url: redisUrl() }) as RedisClientType;
 
     client.on("error", (err) => {
-      logger.warn({ err: err.message }, "Erro no cliente Redis");
+      // `ECONNREFUSED` chega com `message` vazia e o motivo dentro de
+      // `cause`/`code`. Logar só a mensagem produzia `err: ""` repetido
+      // sem parar — o suficiente para saber que algo falhou, insuficiente
+      // para saber o quê ou contra qual endereço. O destino entra junto
+      // porque o modo de falha típico é justamente apontar para o lugar
+      // errado (o fallback de `redisUrl()` num contêiner, por exemplo).
+      const e = err as NodeJS.ErrnoException & { cause?: unknown };
+      const causa = e.cause instanceof Error ? e.cause.message : undefined;
+      logger.warn(
+        {
+          err: e.message || causa || e.code || String(err),
+          code: e.code,
+          destino: redisUrl(),
+        },
+        "Erro no cliente Redis",
+      );
     });
 
     await client.connect();

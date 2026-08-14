@@ -81,6 +81,13 @@ services:
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      # Migration e seed não usam Redis, mas os scripts que passam por
+      # `requirePermission` usam — o cache de permissões vive nele. Sem esta
+      # linha o cliente cai no `localhost` do fallback, que não existe dentro
+      # do contêiner, e fica reconectando para sempre: o script não falha,
+      # PENDURA, e o log só repete "Erro no cliente Redis".
+      REDIS_URL: redis://redis:6379
+      QUEUE_PREFIX: otatitan
     command: >
       sh -c "npx prisma migrate deploy && npx tsx prisma/seed.ts"
 

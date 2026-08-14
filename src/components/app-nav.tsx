@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  CalendarCheck,
   CalendarDays,
   Home,
   LayoutDashboard,
@@ -39,7 +40,9 @@ const ITENS: Item[] = [
   { href: "/dashboard", label: "Painel", icon: LayoutDashboard },
   { href: "/imoveis", label: "Imóveis", icon: Home, permission: "properties.view" },
   { href: "/calendario", label: "Calendário", icon: CalendarDays, permission: "availability.view" },
-  { href: "/reservas", label: "Reservas", icon: CalendarDays, permission: "reservations.view", emBreve: true },
+  // Ícone distinto do calendário: "Calendário" mostra disponibilidade,
+  // "Reservas" mostra venda fechada — dois ícones iguais confundiriam.
+  { href: "/reservas", label: "Reservas", icon: CalendarCheck, permission: "reservations.view" },
   { href: "/tarifas", label: "Tarifas", icon: Tag, permission: "rates.view" },
   { href: "/tarefas", label: "Tarefas", icon: ListChecks, permission: "tasks.view", emBreve: true },
   { href: "/configuracoes", label: "Configurações", icon: Settings, permission: "settings.view", emBreve: true },

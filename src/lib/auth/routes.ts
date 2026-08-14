@@ -4,7 +4,7 @@ import type { RoleSlug } from "@/lib/rbac/roles";
 /**
  * Mapa de rotas → exigência mínima. Transcrição de
  * docs/06-mapa-navegacao.md; ao mudar aqui, atualize lá (o teste
- * `tests/unit/route-map.test.ts` lê os dois e falha se divergirem).
+ * `tests/unit/auth-routes.test.ts` lê os dois e falha se divergirem).
  *
  * Isto alimenta a checagem OTIMISTA do proxy, que só lê o cookie. A
  * checagem que realmente autoriza é `requireActorWith(...)` na página ou
@@ -35,9 +35,19 @@ export const AUTH_PREFIXES = ["/login", "/esqueci-senha", "/redefinir-senha"] as
 
 export const ROUTE_RULES: readonly RouteRule[] = [
   { prefix: "/dashboard" },
+  // `/imoveis/novo` e `/imoveis/[id]` herdam este prefixo: a escrita
+  // (`.create`/`.edit`) é exigida na página, junto ao dado, não no proxy.
   { prefix: "/imoveis", permission: "properties.view" },
   { prefix: "/tarifas", permission: "rates.view" },
   { prefix: "/calendario", permission: "availability.view" },
+  /**
+   * Cobre `/reservas`, `/reservas/nova` e `/reservas/[id]`. O gate do
+   * proxy é o de LEITURA; `/reservas/nova` exige `reservations.create`,
+   * conferido por `requireActorWith` na própria página — mesma divisão de
+   * `/imoveis/novo`. Registrar aqui um prefixo mais específico não
+   * aumentaria a segurança (o proxy só lê o cookie, ADR-007) e faria o
+   * proxy redirecionar antes da checagem que de fato autoriza.
+   */
   { prefix: "/reservas", permission: "reservations.view" },
   { prefix: "/tarefas", permission: "tasks.view" },
   { prefix: "/reports", permission: "reports.view" },

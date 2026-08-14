@@ -21,11 +21,22 @@ por `src/proxy.ts`. (No Next.js 16 o antigo `middleware.ts` chama-se
 | `/portal-proprietario/*` | `(owner-portal)` | papel `property_owner` |
 | `/portal-hospede/*` | `(guest-portal)` | papel `guest` ou sessão de reserva |
 | `/stays/[slug]`, `/stays/[slug]/book*` | `(public)` | pública |
+| `/stays/pagamento` | `(public)` | pública — retorno do checkout hospedado |
 | `/api/auth/*`, `/api/webhooks/*`, `/api/health` | — | fora do gate de auth/CSRF do proxy |
 | `/api/*` (resto) | — | sessão válida + `requirePermission` por rota |
 
 A rota **mais específica vence**: `/configuracoes/usuarios` exige
 `users.admin`, não o `settings.view` do prefixo pai.
+
+**As permissões de escrita entre parênteses não são regra de proxy.** Para
+`/imoveis/novo` (`properties.create`), `/tarifas/[unitId]` em edição
+(`rates.edit`) e `/reservas/nova` (`reservations.create`), `ROUTE_RULES`
+registra apenas o prefixo de leitura; a permissão de escrita é exigida na
+própria página com `requireActorWith(...)` — em `/reservas/nova`,
+`requireActorWith("reservations.create")`. É deliberado: o proxy só lê o
+cookie e não consulta o banco, então um prefixo mais específico ali só
+adiantaria um redirecionamento *otimista*, antes da checagem que de fato
+autoriza (ADR-007).
 
 Não logado em rota protegida → redireciona para `/login?callbackUrl=...`
 (só caminho relativo do próprio app é aceito, para não virar open

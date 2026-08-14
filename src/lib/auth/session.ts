@@ -2,7 +2,11 @@ import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "./index";
-import { requirePermission, type ActorContext } from "@/lib/rbac/guard";
+import {
+  requirePermission,
+  resolveRoleSlug,
+  type ActorContext,
+} from "@/lib/rbac/guard";
 import type { PermissionCode } from "@/lib/rbac/permissions";
 
 /**
@@ -30,6 +34,15 @@ export type SessionActor = ActorContext & {
  * Ator autenticado COM empresa ativa. Redireciona em vez de lançar:
  * dentro de um Server Component, mandar o usuário para o login é o
  * comportamento correto, não uma tela de erro.
+ *
+ * O `roleSlug` do token é ponto de partida, NÃO a resposta: ele só é gravado
+ * no login e na troca de empresa, e a sessão dura horas (`SESSION_MAX_AGE_SECONDS`).
+ * Quem foi rebaixado no banco continuaria com o papel antigo — e como
+ * `scopeFor` decide o escopo pelo papel, um proprietário rebaixado seguia
+ * enxergando as reservas da empresa inteira, com nome de hóspede e valores,
+ * até a sessão expirar. Aqui o papel é reconferido no servidor
+ * (`resolveRoleSlug`, cacheado junto das permissões) e é o valor RESOLVIDO
+ * que entra no `ActorContext`.
  */
 export async function requireActor(): Promise<SessionActor> {
   const session = await getSession();
@@ -43,10 +56,22 @@ export async function requireActor(): Promise<SessionActor> {
     redirect("/selecionar-empresa");
   }
 
-  return {
+  const roleSlug = await resolveRoleSlug({
     userId: session.user.id,
     tenantId: session.tenantId,
     roleSlug: session.roleSlug,
+    permVersion: session.permVersion,
+  });
+  if (!roleSlug) {
+    // A membership foi revogada, desativada, ou o papel saiu do catálogo
+    // desde o login. Não há acesso a este tenant — escolher outra empresa.
+    redirect("/selecionar-empresa");
+  }
+
+  return {
+    userId: session.user.id,
+    tenantId: session.tenantId,
+    roleSlug,
     permVersion: session.permVersion,
     isSuperadmin: session.user.isSuperadmin,
     email: session.user.email ?? null,

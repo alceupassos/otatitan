@@ -88,6 +88,11 @@ services:
       # PENDURA, e o log só repete "Erro no cliente Redis".
       REDIS_URL: redis://redis:6379
       QUEUE_PREFIX: otatitan
+      # Mesma história: as URLs de retorno do checkout saem daqui, e sem
+      # esta linha `baseDoApp()` cai no `http://localhost:3040` do fallback.
+      # O provedor recusa a cobrança inteira — endereço de loopback não é
+      # alcançável por quem vai pagar.
+      APP_URL: ${APP_URL}
     command: >
       sh -c "npx prisma migrate deploy && npx tsx prisma/seed.ts"
 

@@ -245,6 +245,35 @@ async function main() {
   console.log(`✔ Tarifa de ${formatMoney(VALOR_CENTS, unidade.currency)} publicada em ${dia}.`);
 
   // ── Reserva ───────────────────────────────────────────────────────────
+  /**
+   * Uma tentativa anterior pode ter criado a reserva e falhado só na
+   * cobrança (provedor fora do ar, URL recusada). A reserva sobrevive e
+   * SEGURA a data — rodar de novo esbarraria na constraint anti-overbooking
+   * contra a nossa própria reserva, e a mensagem ("datas ocupadas") mandaria
+   * procurar um conflito que não existe. Reaproveitar é o comportamento
+   * certo: é a mesma venda, retomada.
+   */
+  const jaExiste = await db.reservation.findFirst({
+    where: {
+      tenantId: actor.tenantId,
+      unitId: unidade.id,
+      checkIn,
+      status: "PENDING",
+    },
+    select: { id: true, code: true, totalCents: true, currency: true, holdExpiresAt: true },
+  });
+
+  if (jaExiste) {
+    console.log(
+      `↺ Reserva ${jaExiste.code} já existia para esta data — retomando a ` +
+        "cobrança dela em vez de criar outra.",
+    );
+    const cobrancaExistente = await abrirCobranca(actor, { reservationId: jaExiste.id });
+    imprimirLink(cobrancaExistente, jaExiste.code, jaExiste.holdExpiresAt);
+    await db.$disconnect();
+    return;
+  }
+
   const reserva = await criarReserva(actor, {
     unitId: unidade.id,
     checkIn,
@@ -280,7 +309,16 @@ async function main() {
 
   // ── Cobrança ──────────────────────────────────────────────────────────
   const cobranca = await abrirCobranca(actor, { reservationId: reserva.id });
+  imprimirLink(cobranca, reserva.codigoFormatado, reserva.holdExpiresAt);
 
+  await db.$disconnect();
+}
+
+function imprimirLink(
+  cobranca: { redirectUrl: string; amountCents: number; currency: string },
+  codigo: string,
+  holdExpiresAt: Date | null,
+) {
   console.log(
     [
       "",
@@ -290,16 +328,14 @@ async function main() {
       cobranca.redirectUrl,
       "═".repeat(64),
       "",
-      `Reserva:  ${reserva.codigoFormatado}`,
-      `Expira:   junto com o hold (${reserva.holdExpiresAt?.toISOString() ?? "—"})`,
+      `Reserva:  ${codigo}`,
+      `Expira:   junto com o hold (${holdExpiresAt?.toISOString() ?? "—"})`,
       "",
       "Depois de pagar, a reserva confirma sozinha pelo webhook.",
       "Se desistir, CANCELE a reserva no painel — ela segura a data até o",
       "hold vencer.",
     ].join("\n"),
   );
-
-  await db.$disconnect();
 }
 
 main().catch((err) => {

@@ -35,6 +35,8 @@ export const RATE_LIMITS = {
   "reset:ip": { limit: 10, windowSeconds: 3600 },
   "reset:email": { limit: 5, windowSeconds: 3600 },
   "mfa:user": { limit: 10, windowSeconds: 300 },
+  "direct:search:ip": { limit: 60, windowSeconds: 60 },
+  "direct:book:ip": { limit: 8, windowSeconds: 300 },
 } as const satisfies Record<string, RateLimitRule>;
 
 export type RateLimitKey = keyof typeof RATE_LIMITS;

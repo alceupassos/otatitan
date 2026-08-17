@@ -67,6 +67,54 @@ export type TarifaCotavel = {
   closedToDeparture: boolean;
 };
 
+/**
+ * Taxas extras do canal direto, aplicadas no servidor (RN-003 / RN-006).
+ *
+ * Não são diária: a diária continua saindo só de `DailyRate`. Os valores
+ * vêm de configuração editável (site ao vivo / `direct-booking/config.ts`),
+ * nunca de um total enviado pelo cliente. Ausente = zero, e os testes do
+ * motor de diária não mudam.
+ */
+export type ExtrasCotacao = {
+  /** Hóspedes já inclusos na diária; o restante paga extra por noite. */
+  includedGuests: number;
+  extraGuestCentsPerNight: number;
+  /** Quantidade informada; a taxa de PET é por estadia, não por animal. */
+  pets: number;
+  petFeeCents: number;
+  parking: boolean;
+  parkingFeeCents: number;
+};
+
+export type BreakdownExtras = {
+  extraGuestCount: number;
+  extraGuestCents: number;
+  petFeeCents: number;
+  parkingFeeCents: number;
+};
+
+export function calcularExtras(
+  extras: ExtrasCotacao | undefined,
+  hospedes: number,
+  nights: number,
+): BreakdownExtras {
+  if (!extras) {
+    return {
+      extraGuestCount: 0,
+      extraGuestCents: 0,
+      petFeeCents: 0,
+      parkingFeeCents: 0,
+    };
+  }
+  const extraGuestCount = Math.max(0, hospedes - extras.includedGuests);
+  return {
+    extraGuestCount,
+    extraGuestCents: extraGuestCount * extras.extraGuestCentsPerNight * nights,
+    petFeeCents: extras.pets > 0 ? extras.petFeeCents : 0,
+    parkingFeeCents: extras.parking ? extras.parkingFeeCents : 0,
+  };
+}
+
 export type EntradaCotacao = {
   unit: UnidadeCotavel;
   planos: PlanoCotavel[];
@@ -80,6 +128,12 @@ export type EntradaCotacao = {
   hoje: Date;
   /** Instante da cotação; injetável para o snapshot ficar determinista em teste. */
   agora?: Date;
+  /**
+   * Quando informado, só este plano é avaliado — o hóspede escolheu entre
+   * reembolsável e não reembolsável. Sem isto, vale o vencedor de sempre.
+   */
+  ratePlanId?: string;
+  extras?: ExtrasCotacao;
 };
 
 export type NoiteCotada = {
@@ -119,6 +173,7 @@ export type QuoteSnapshot = {
   /** A limpeza já está embutida na diária do plano? */
   cleaningFeeIncluso: boolean;
   cancellationPolicy: string;
+  extras?: BreakdownExtras;
 };
 
 export type Cotacao = {
@@ -142,6 +197,7 @@ export type Cotacao = {
   cancellationPolicy: string;
   minNightsEfetivo: number;
   maxNightsEfetivo: number | null;
+  extras?: BreakdownExtras;
   snapshot: QuoteSnapshot;
 };
 
@@ -227,6 +283,7 @@ export function cotar(entrada: EntradaCotacao): ResultadoCotacao {
 
   const planos = entrada.planos
     .filter((p) => p.status === "ACTIVE")
+    .filter((p) => (entrada.ratePlanId ? p.id === entrada.ratePlanId : true))
     .sort(ordenarPlanos);
 
   if (planos.length === 0) {
@@ -263,6 +320,31 @@ export function cotar(entrada: EntradaCotacao): ResultadoCotacao {
 
   vencedoras.sort(ordenarCotacoes);
   return { ok: true, cotacao: vencedoras[0]!.cotacao };
+}
+
+/**
+ * Cota TODOS os planos vendáveis, não só o vencedor.
+ *
+ * O canal direto mostra reembolsável e não reembolsável lado a lado; o
+ * operador do painel continua usando `cotar()`, que escolhe um.
+ */
+export function cotarTodosPlanos(entrada: EntradaCotacao): {
+  cotacoes: Cotacao[];
+  recusas: Recusa[];
+} {
+  const resultado: { cotacoes: Cotacao[]; recusas: Recusa[] } = {
+    cotacoes: [],
+    recusas: [],
+  };
+  const ativos = entrada.planos.filter((p) => p.status === "ACTIVE");
+  for (const plano of ativos) {
+    const r = cotar({ ...entrada, ratePlanId: plano.id, planos: [plano] });
+    if (r.ok) resultado.cotacoes.push(r.cotacao);
+    else resultado.recusas.push(...r.recusas);
+  }
+  resultado.cotacoes.sort((a, b) => a.totalCents - b.totalCents);
+  resultado.recusas = dedupeRecusas(resultado.recusas);
+  return resultado;
 }
 
 function cotarPlano(
@@ -406,7 +488,11 @@ function cotarPlano(
   const nightlyTotalCents = cotadas.reduce((soma, n) => soma + n.priceCents, 0);
   // Quando o plano embute a limpeza, ela já está diluída na diária;
   // somá-la de novo cobraria duas vezes.
-  const feesTotalCents = plano.includesCleaningFee ? 0 : unit.cleaningFeeCents;
+  const limpezaCents = plano.includesCleaningFee ? 0 : unit.cleaningFeeCents;
+  const extras = calcularExtras(entrada.extras, entrada.hospedes, nights);
+  const extrasCents =
+    extras.extraGuestCents + extras.petFeeCents + extras.parkingFeeCents;
+  const feesTotalCents = limpezaCents + extrasCents;
   // Impostos e descontos existem na Reservation mas ainda não têm cadastro
   // próprio (v1); ficam zerados aqui e não são inventados no total.
   const taxesTotalCents = 0;
@@ -436,6 +522,7 @@ function cotarPlano(
     cleaningFeeCents: unit.cleaningFeeCents,
     cleaningFeeIncluso: plano.includesCleaningFee,
     cancellationPolicy: plano.cancellationPolicy,
+    extras: extrasCents > 0 ? extras : undefined,
   };
 
   return {
@@ -461,6 +548,7 @@ function cotarPlano(
       cancellationPolicy: plano.cancellationPolicy,
       minNightsEfetivo: minEfetivo,
       maxNightsEfetivo: maxEfetivo,
+      extras: extrasCents > 0 ? extras : undefined,
       snapshot,
     },
   };

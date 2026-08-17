@@ -428,3 +428,47 @@ export async function archiveUnitAction(formData: FormData): Promise<void> {
   revalidatePath(`/imoveis/${propertyId}`);
   redirect(`/imoveis/${propertyId}`);
 }
+
+export async function uploadPropertyPhotoAction(formData: FormData) {
+  const actor = await requireActorWith("media.create");
+  const propertyId = String(formData.get("propertyId") ?? "");
+  const file = formData.get("arquivo");
+  if (!propertyId || !(file instanceof File) || file.size === 0) {
+    redirect(`/imoveis/${propertyId || ""}?erro=${ERRO_QUERY.falha}`);
+  }
+
+  const bytes = Buffer.from(await file.arrayBuffer());
+  try {
+    await withTenant({ tenantId: actor.tenantId, userId: actor.userId }, async (tx) => {
+      const property = await tx.property.findFirst({
+        where: { id: propertyId, ...scopeFor(actor, "Property") },
+        select: { id: true },
+      });
+      if (!property) throw new NotFoundInScope();
+      const { guardarFotoImovel } = await import("@/lib/media/storage");
+      await guardarFotoImovel({
+        tx,
+        propertyId,
+        uploadedById: actor.userId,
+        bytes,
+        mime: file.type || "image/jpeg",
+        fileName: file.name,
+        altText: String(formData.get("altText") ?? file.name),
+        isCover: formData.get("isCover") === "on",
+      });
+      await writeAudit(tx, {
+        action: "media.uploaded",
+        entityType: "Property",
+        entityId: propertyId,
+        actorUserId: actor.userId,
+        after: { mime: file.type, sizeBytes: bytes.length },
+      });
+    });
+  } catch (err) {
+    logger.error({ err: (err as Error).message }, "Falha ao enviar foto do imóvel");
+    redirect(`/imoveis/${propertyId}?erro=${ERRO_QUERY.falha}`);
+  }
+
+  revalidatePath(`/imoveis/${propertyId}`);
+  redirect(`/imoveis/${propertyId}`);
+}

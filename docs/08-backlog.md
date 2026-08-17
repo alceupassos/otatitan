@@ -82,8 +82,11 @@ passo que os testes não cobrem, porque exige a API de produção), telas de
 - UC-010 previa um assistente de 6 passos com rascunho por etapa; o que
   existe é um formulário único que salva como `DRAFT`. O rascunho
   funciona, o passo-a-passo não.
-- Mídia/fotos de imóvel (`Media`) não tem UI — depende de S3/MinIO
-  provisionado.
+- Mídia/fotos de imóvel (`Media`): UI na aba Fotos do imóvel. S3 se
+  configurado; senão disco local `uploads/media`. O canal direto Madre 914
+  usa `/fotos` estático (fachada e hall do site ao vivo).
+- Canal direto público no mesmo app (`madre914.com.br` vs painel):
+  cotação no servidor, hold, Asaas, 4 studios reais.
 - "Excluir" imóvel/unidade é **arquivar**, nunca apagar: reservas,
   pagamentos e auditoria apontam para eles.
 - **Nenhum pagamento real passou pelo fluxo.** O Asaas está em PRODUÇÃO

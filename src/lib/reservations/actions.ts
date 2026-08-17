@@ -16,7 +16,7 @@ import type { HospedeInput } from "@/lib/guests/schemas";
 import { logger } from "@/lib/logging/logger";
 import { getProviderByKey } from "@/lib/payments/provider";
 import { cotarUnidade } from "@/lib/pricing/queries";
-import { precoConfere, type Cotacao } from "@/lib/pricing/quote";
+import { precoConfere, type Cotacao, type ExtrasCotacao } from "@/lib/pricing/quote";
 import {
   requirePermission,
   scopeFor,
@@ -93,6 +93,9 @@ export type NovaReserva = {
   origem?: ReservationSource;
   guestNotes?: string | null;
   internalNotes?: string | null;
+  /** Plano escolhido pelo hóspede no canal direto; ausente = vencedor. */
+  ratePlanId?: string;
+  extras?: ExtrasCotacao;
   /** Injetáveis para teste; por padrão, hoje em UTC e agora. */
   hoje?: Date;
   agora?: Date;
@@ -135,8 +138,11 @@ export type ReservaCriada = {
 export async function criarReserva(
   actor: ActorContext,
   entrada: NovaReserva,
+  opts: { autorizar?: boolean } = {},
 ): Promise<ReservaCriada> {
-  await requirePermission(actor, "reservations.create");
+  if (opts.autorizar !== false) {
+    await requirePermission(actor, "reservations.create");
+  }
 
   const hoje = entrada.hoje ?? hojeUtc();
   const agora = entrada.agora ?? new Date();
@@ -150,6 +156,8 @@ export async function criarReserva(
     checkOut: entrada.checkOut,
     hospedes,
     hoje,
+    ratePlanId: entrada.ratePlanId,
+    extras: entrada.extras,
   });
   if (!previa) throw new UnidadeNaoEncontrada();
   if (!previa.resultado.ok) {
@@ -235,6 +243,8 @@ async function inserirReserva(
         hospedes: ctx.hospedes,
         hoje: ctx.hoje,
         agora: ctx.agora,
+        ratePlanId: entrada.ratePlanId,
+        extras: entrada.extras,
       });
       if (!resultado.ok) {
         throw new UnidadeNaoVendavel(resultado.recusa, resultado.recusas);

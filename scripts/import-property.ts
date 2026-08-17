@@ -8,11 +8,16 @@
  *     run --rm --entrypoint sh migrate -c \
  *     'npx tsx scripts/import-property.ts --arquivo scripts/data/madre914.json --tenant titan-prime'
  *
- * Existe porque cadastrar 40 unidades a mão pela UI é inviável, e a
- * importação inicial só está prevista para v2 (docs/01). Roda como
- * otatitan_owner (única role com BYPASSRLS), pelo mesmo motivo do seed:
- * escreve em tabela tenant-scoped resolvendo o tenant por slug, antes de
- * existir contexto de sessão.
+ * A operação real do Madre 914 são 4 studios (312, 409, 506, 609), listados
+ * um a um em `unidades`. `gerarUnidades` continua existindo para outros
+ * prédios, mas NÃO deve ser usado aqui — o arquivo antigo gerava 40
+ * rascunhos fictícios. Com `arquivarUnidadesAusentes: true`, reimportar
+ * arquiva unidades do imóvel cujo `internalCode` não está no arquivo
+ * (os 36 DRAFT de uma importação velha saem do calendário).
+ *
+ * Roda como otatitan_owner (única role com BYPASSRLS), pelo mesmo motivo
+ * do seed: escreve em tabela tenant-scoped resolvendo o tenant por slug,
+ * antes de existir contexto de sessão.
  *
  * É idempotente: reexecutar com o mesmo arquivo atualiza em vez de
  * duplicar (chaveado por `slug` do imóvel e `internalCode` da unidade).
@@ -53,6 +58,12 @@ type Arquivo = {
   /** Slugs de comodidade aplicados a todas as unidades geradas. */
   comodidades?: string[];
   unidades?: Record<string, string>[];
+  /**
+   * Se true, unidades do imóvel cujo `internalCode` não está neste arquivo
+   * são arquivadas. Serve para corrigir uma importação antiga (ex.: 40
+   * rascunhos) sem apagar histórico de reserva.
+   */
+  arquivarUnidadesAusentes?: boolean;
   gerarUnidades?: {
     andares: number[];
     porAndar: number;
@@ -206,6 +217,28 @@ async function main() {
     }
   }
 
+  let arquivadas = 0;
+  if (conteudo.arquivarUnidadesAusentes) {
+    const codigos = new Set(brutas.map((u) => u.internalCode));
+    const extras = await db.unit.findMany({
+      where: {
+        tenantId: tenant.id,
+        propertyId: property.id,
+        status: { not: "ARCHIVED" },
+      },
+      select: { id: true, internalCode: true },
+    });
+    for (const extra of extras) {
+      if (codigos.has(extra.internalCode)) continue;
+      await db.unit.update({
+        where: { id: extra.id },
+        data: { status: "ARCHIVED", archivedAt: new Date() },
+      });
+      arquivadas++;
+      console.log(`  arquivada (ausente do arquivo): ${extra.internalCode}`);
+    }
+  }
+
   await db.auditLog.create({
     data: {
       tenantId: tenant.id,
@@ -218,14 +251,16 @@ async function main() {
         slug: property.slug,
         unidadesCriadas: criadas,
         unidadesAtualizadas: atualizadas,
+        unidadesArquivadas: arquivadas,
         arquivo,
       },
     },
   });
 
   console.log(
-    `Unidades: ${criadas} criada(s), ${atualizadas} atualizada(s), ` +
-      `${amenityIds.length} comodidade(s) por unidade.`,
+    `Unidades: ${criadas} criada(s), ${atualizadas} atualizada(s)` +
+      (arquivadas > 0 ? `, ${arquivadas} arquivada(s)` : "") +
+      `, ${amenityIds.length} comodidade(s) por unidade.`,
   );
   await db.$disconnect();
 }

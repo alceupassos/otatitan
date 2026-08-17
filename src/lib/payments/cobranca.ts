@@ -104,6 +104,11 @@ export type EntradaCobranca = {
    */
   provider?: PaymentProviderAdapter;
   agora?: Date;
+  /**
+   * Base das URLs de retorno do checkout. O canal direto (madre914.com.br)
+   * não pode devolver o hóspede para o painel em otatitan.*.
+   */
+  returnBaseUrl?: string;
 };
 
 export type CobrancaAberta = {
@@ -543,8 +548,11 @@ async function prepararCobranca(
 export async function abrirCobranca(
   actor: ActorContext,
   entrada: EntradaCobranca,
+  opts: { autorizar?: boolean } = {},
 ): Promise<CobrancaAberta> {
-  await requirePermission(actor, "payments.create");
+  if (opts.autorizar !== false) {
+    await requirePermission(actor, "payments.create");
+  }
 
   const agora = entrada.agora ?? new Date();
   const provider = entrada.provider ?? getPaymentProvider();
@@ -562,7 +570,7 @@ export async function abrirCobranca(
   const preparo = await prepararCobranca(actor, entrada, provider, agora);
   if (preparo.tipo === "reaproveitada") return preparo.cobranca;
 
-  const base = baseDoApp();
+  const base = (entrada.returnBaseUrl ?? baseDoApp()).replace(/\/+$/, "");
   const codigoFormatado = formatarCodigo(preparo.code);
 
   let resultado: CheckoutResult;

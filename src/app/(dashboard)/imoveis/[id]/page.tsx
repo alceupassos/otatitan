@@ -5,7 +5,7 @@ import { AlertCircle, ChevronLeft, DoorOpen, Plus } from "lucide-react";
 import { requireActorWith } from "@/lib/auth/session";
 import { updatePropertyAction } from "@/lib/properties/actions";
 import { ERRO_MENSAGENS } from "@/lib/properties/errors";
-import { getProperty } from "@/lib/properties/queries";
+import { getProperty, listPropertyMedia } from "@/lib/properties/queries";
 import { UNIT_STATUS_LABELS } from "@/lib/properties/schemas";
 import { formatMoney } from "@/lib/money";
 import { contar } from "@/lib/plural";
@@ -23,6 +23,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PropertyForm } from "../property-form";
 import { ArchivePropertyButton } from "./archive-button";
+import { PropertyPhotos } from "./property-photos";
 
 type Params = { params: Promise<{ id: string }>; searchParams: Promise<{ erro?: string }> };
 
@@ -44,10 +45,12 @@ export default async function PropertyDetailPage({ params, searchParams }: Param
   // que o id existe em outra carteira.
   if (!property) notFound();
 
-  const [podeEditar, podeExcluir, podeCriarUnidade] = await Promise.all([
+  const [podeEditar, podeExcluir, podeCriarUnidade, podeMedia, midia] = await Promise.all([
     hasPermission(actor, "properties.edit"),
     hasPermission(actor, "properties.delete"),
     hasPermission(actor, "units.create"),
+    hasPermission(actor, "media.create"),
+    listPropertyMedia(actor, id),
   ]);
 
   const salvar = updatePropertyAction.bind(null, property.id);
@@ -94,6 +97,7 @@ export default async function PropertyDetailPage({ params, searchParams }: Param
               ? "1 unidade"
               : `Unidades (${property.units.length})`}
           </TabsTrigger>
+          <TabsTrigger value="fotos">Fotos</TabsTrigger>
           <TabsTrigger value="dados">Dados do imóvel</TabsTrigger>
         </TabsList>
 
@@ -178,6 +182,15 @@ export default async function PropertyDetailPage({ params, searchParams }: Param
               ))}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="fotos" className="pt-4">
+          <PropertyPhotos
+            propertyId={property.id}
+            slug={property.slug}
+            media={midia?.media ?? []}
+            podeEnviar={podeMedia}
+          />
         </TabsContent>
 
         <TabsContent value="dados" className="pt-4">

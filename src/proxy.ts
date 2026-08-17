@@ -8,6 +8,10 @@ import {
   ruleFor,
 } from "@/lib/auth/routes";
 import { permissionsForRole } from "@/lib/rbac/roles";
+import {
+  DIRECT_HOST_PUBLIC_PREFIXES,
+  isDirectBookingHost,
+} from "@/lib/direct-booking/hosts";
 
 /**
  * Proxy (o antigo `middleware` — renomeado no Next.js 16).
@@ -21,12 +25,16 @@ import { permissionsForRole } from "@/lib/rbac/roles";
  * permissões (`SYSTEM_ROLES`), não o banco: é um pré-filtro de UX. Um
  * papel cujas permissões foram customizadas pode passar por aqui e ser
  * barrado na página — nunca o contrário, que é o que importaria.
+ *
+ * Host do canal direto (madre914.com.br): `/` e `/politicas` são públicos.
+ * O painel (otatitan.*) continua exigindo login em `/`.
  */
 export default auth((req) => {
   const { nextUrl } = req;
   const { pathname } = nextUrl;
   const session = req.auth;
   const isLoggedIn = Boolean(session?.user?.id);
+  const host = req.headers.get("host");
 
   // Logado tentando voltar ao login: manda para o lugar certo.
   if (isLoggedIn && matchesPrefix(pathname, AUTH_PREFIXES)) {
@@ -34,7 +42,13 @@ export default auth((req) => {
     return NextResponse.redirect(new URL(home, nextUrl));
   }
 
-  if (matchesPrefix(pathname, PUBLIC_PREFIXES)) {
+  const publicoDoCanal =
+    isDirectBookingHost(host) &&
+    DIRECT_HOST_PUBLIC_PREFIXES.some(
+      (p) => pathname === p || (p !== "/" && pathname.startsWith(`${p}/`)),
+    );
+
+  if (matchesPrefix(pathname, PUBLIC_PREFIXES) || publicoDoCanal) {
     return NextResponse.next();
   }
 

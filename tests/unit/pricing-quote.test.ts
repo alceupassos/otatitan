@@ -3,6 +3,7 @@ import { addDias, parseDateOnly, toDateOnly } from "@/lib/dates";
 import { EstadiaInvalida, RECUSA } from "@/lib/pricing/errors";
 import {
   cotar,
+  cotarTodosPlanos,
   precoConfere,
   VERSAO_COTACAO,
   type EntradaCotacao,
@@ -448,5 +449,59 @@ describe("entrada inválida", () => {
     if (r.ok) return;
     expect(r.recusa.codigo).toBe(RECUSA.excedeHospedes);
     expect(r.recusa.data).toBeNull();
+  });
+});
+
+describe("extras do canal direto", () => {
+  const extras = {
+    includedGuests: 2,
+    extraGuestCentsPerNight: 4_000,
+    pets: 1,
+    petFeeCents: 8_000,
+    parking: true,
+    parkingFeeCents: 5_000,
+  };
+
+  it("soma extras em feesTotalCents sem alterar as diárias", () => {
+    const r = cotar(entrada({ hospedes: 3, extras }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.cotacao.nightlyTotalCents).toBe(90_000);
+    // limpeza 15000 + extra 1*4000*3 + pet 8000 + garagem 5000
+    expect(r.cotacao.feesTotalCents).toBe(15_000 + 12_000 + 8_000 + 5_000);
+    expect(r.cotacao.totalCents).toBe(90_000 + 15_000 + 12_000 + 8_000 + 5_000);
+    expect(precoConfere(r.cotacao, r.cotacao.totalCents)).toBe(true);
+  });
+
+  it("sem extras o total continua o de sempre", () => {
+    const r = cotar(entrada());
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.cotacao.totalCents).toBe(105_000);
+    expect(r.cotacao.extras).toBeUndefined();
+  });
+});
+
+describe("cotarTodosPlanos", () => {
+  it("devolve os dois planos vendáveis lado a lado", () => {
+    const barato = plano({
+      id: "plan-nr",
+      code: "NR",
+      name: "Não reembolsável",
+      isDefault: false,
+      priority: 0,
+    });
+    const r = cotarTodosPlanos(
+      entrada({
+        planos: [plano(), barato],
+        tarifas: [
+          ...tarifas("plan-padrao", 30_000),
+          ...tarifas("plan-nr", 27_000),
+        ],
+      }),
+    );
+    expect(r.cotacoes).toHaveLength(2);
+    expect(r.cotacoes[0]!.nightlyTotalCents).toBe(81_000);
+    expect(r.cotacoes[1]!.nightlyTotalCents).toBe(90_000);
   });
 });

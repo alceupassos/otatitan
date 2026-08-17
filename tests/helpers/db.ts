@@ -56,6 +56,8 @@ export async function createTestUnit(
 export async function cleanupTenants(tenantIds: string[]) {
   for (const tenantId of tenantIds) {
     await withTenant({ tenantId }, async (tx) => {
+      await tx.media.deleteMany({});
+      await tx.consent.deleteMany({});
       await tx.availabilityBlock.deleteMany({});
       await tx.reservationGuest.deleteMany({});
       await tx.payment.deleteMany({});

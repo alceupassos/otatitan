@@ -20,8 +20,11 @@ por `src/proxy.ts`. (No Next.js 16 o antigo `middleware.ts` chama-se
 | `/configuracoes/usuarios`, `/configuracoes/papeis` | `(dashboard)` | `users.admin` / `roles.admin` |
 | `/portal-proprietario/*` | `(owner-portal)` | papel `property_owner` |
 | `/portal-hospede/*` | `(guest-portal)` | papel `guest` ou sessão de reserva |
-| `/stays/[slug]`, `/stays/[slug]/book*` | `(public)` | pública |
+| `/stays/madre-914` | `(direct)` | pública — preview do canal direto (qualquer host) |
 | `/stays/pagamento` | `(public)` | pública — retorno do checkout hospedado |
+| `/politicas/*` | `(direct)` | pública — políticas do canal direto Madre 914 |
+| `/` no host `madre914.com.br` | `(direct)` | pública — mesmo conteúdo de `/stays/madre-914` |
+| `/` no host do painel | — | redireciona para `/login` ou `/dashboard` |
 | `/api/auth/*`, `/api/webhooks/*`, `/api/health` | — | fora do gate de auth/CSRF do proxy |
 | `/api/*` (resto) | — | sessão válida + `requirePermission` por rota |
 

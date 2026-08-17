@@ -5,7 +5,7 @@ import { toDateOnly } from "@/lib/dates";
 import { withTenant, type TenantTx } from "@/lib/db/with-tenant";
 import { nomeCompleto } from "@/lib/guests/schemas";
 import { carregarInsumosCotacao } from "@/lib/pricing/queries";
-import { cotar, type ResultadoCotacao } from "@/lib/pricing/quote";
+import { cotar, type ExtrasCotacao, type ResultadoCotacao } from "@/lib/pricing/quote";
 import { scopeFor, type ActorContext } from "@/lib/rbac/guard";
 import { formatarCodigo } from "./codigo";
 import { saldoDevedorCents } from "./estados";
@@ -388,7 +388,15 @@ export async function carregarUnidadeParaReserva(
 export async function cotarNaTransacao(
   tx: TenantTx,
   unidade: UnidadeParaReserva,
-  pedido: { checkIn: Date; checkOut: Date; hospedes: number; hoje: Date; agora?: Date },
+  pedido: {
+    checkIn: Date;
+    checkOut: Date;
+    hospedes: number;
+    hoje: Date;
+    agora?: Date;
+    ratePlanId?: string;
+    extras?: ExtrasCotacao;
+  },
 ): Promise<ResultadoCotacao> {
   const insumos = await carregarInsumosCotacao(
     tx,
@@ -414,5 +422,7 @@ export async function cotarNaTransacao(
     hospedes: pedido.hospedes,
     hoje: pedido.hoje,
     agora: pedido.agora,
+    ratePlanId: pedido.ratePlanId,
+    extras: pedido.extras,
   });
 }

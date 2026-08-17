@@ -2,7 +2,7 @@ import "server-only";
 import { withTenant, type TenantTx } from "@/lib/db/with-tenant";
 import { hojeUtc } from "@/lib/dates";
 import { scopeFor, type ActorContext } from "@/lib/rbac/guard";
-import { cotar, type PlanoCotavel, type ResultadoCotacao, type TarifaCotavel } from "./quote";
+import { cotar, type ExtrasCotacao, type PlanoCotavel, type ResultadoCotacao, type TarifaCotavel } from "./quote";
 
 /**
  * Leitura dos insumos da cotação.
@@ -97,6 +97,8 @@ export type PedidoCotacao = {
   hospedes: number;
   /** Injetável para teste; por padrão, hoje em UTC. */
   hoje?: Date;
+  ratePlanId?: string;
+  extras?: ExtrasCotacao;
 };
 
 export type CotacaoDeUnidade = {
@@ -175,6 +177,8 @@ export async function cotarUnidade(
           checkOut: pedido.checkOut,
           hospedes: pedido.hospedes,
           hoje,
+          ratePlanId: pedido.ratePlanId,
+          extras: pedido.extras,
         }),
       };
     },

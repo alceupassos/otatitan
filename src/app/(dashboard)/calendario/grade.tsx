@@ -33,6 +33,7 @@ type Linha = {
   propertyId: string;
   propertyName: string;
   ocupacao: Record<string, OcupacaoDia>;
+  semTarifa: string[];
 };
 
 const CORES: Record<string, string> = {
@@ -131,15 +132,22 @@ export function GradeCalendario({
                   {dias.map((d) => {
                     const oc = l.ocupacao[d];
                     const fds = ehFimDeSemana(parseDateOnly(d));
+                    const semDiaria = l.semTarifa.includes(d);
 
                     if (!oc) {
                       return (
                         <td
                           key={d}
+                          title={
+                            semDiaria
+                              ? `${formatarData(parseDateOnly(d))} — sem tarifa, não vende`
+                              : undefined
+                          }
                           className={cn(
                             "border-b border-l",
                             fds && "bg-muted/40",
                             d === hoje && "bg-primary/5",
+                            semDiaria && "bg-[repeating-linear-gradient(45deg,transparent,transparent_4px,rgba(180,83,9,0.25)_4px,rgba(180,83,9,0.25)_8px)]",
                           )}
                         />
                       );
@@ -184,6 +192,10 @@ export function GradeCalendario({
               {label}
             </span>
           ))}
+        <span className="flex items-center gap-1.5">
+          <span className="size-3 rounded-sm bg-[repeating-linear-gradient(45deg,transparent,transparent_4px,rgba(180,83,9,0.45)_4px,rgba(180,83,9,0.45)_8px)] ring-1 ring-amber-700/40" />
+          Sem tarifa (não vende)
+        </span>
       </div>
 
       <Dialog

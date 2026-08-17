@@ -113,6 +113,30 @@ export async function getUnit(actor: ActorContext, propertyId: string, unitId: s
   );
 }
 
+export async function listPropertyMedia(actor: ActorContext, propertyId: string) {
+  return withTenant({ tenantId: actor.tenantId, userId: actor.userId }, async (tx) => {
+    const property = await tx.property.findFirst({
+      where: { id: propertyId, ...scopeFor(actor, "Property") },
+      select: { id: true, slug: true },
+    });
+    if (!property) return null;
+    const media = await tx.media.findMany({
+      where: { ownerType: "PROPERTY", ownerId: propertyId },
+      orderBy: [{ isCover: "desc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
+      select: {
+        id: true,
+        mimeType: true,
+        sizeBytes: true,
+        altText: true,
+        isCover: true,
+        bucket: true,
+        createdAt: true,
+      },
+    });
+    return { slug: property.slug, media };
+  });
+}
+
 /** Catálogo de comodidades: as globais (tenantId nulo) + as do tenant. */
 export async function listAmenities(actor: ActorContext) {
   return withTenant({ tenantId: actor.tenantId, userId: actor.userId }, (tx) =>

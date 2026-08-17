@@ -43,6 +43,7 @@ describe("mapa de rotas", () => {
     expect(matchesPrefix("/login", PUBLIC_PREFIXES)).toBe(true);
     expect(matchesPrefix("/api/auth/callback/credentials", PUBLIC_PREFIXES)).toBe(true);
     expect(matchesPrefix("/stays/casa-vista-mar", PUBLIC_PREFIXES)).toBe(true);
+    expect(matchesPrefix("/politicas/privacidade", PUBLIC_PREFIXES)).toBe(true);
     expect(matchesPrefix("/dashboard", PUBLIC_PREFIXES)).toBe(false);
     // Não pode vazar: /api/reservas não é público só por começar com /api.
     expect(matchesPrefix("/api/reservas", PUBLIC_PREFIXES)).toBe(false);

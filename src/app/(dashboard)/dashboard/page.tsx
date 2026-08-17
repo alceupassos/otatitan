@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { CalendarCheck, Home, ListChecks, Wallet } from "lucide-react";
+import Link from "next/link";
 import { requireActor } from "@/lib/auth/session";
+import { addDias, hojeUtc } from "@/lib/dates";
+import { getResumoOcupacao } from "@/lib/availability/queries";
 import { withTenant } from "@/lib/db/with-tenant";
 import { resolvePermissions, scopeFor } from "@/lib/rbac/guard";
 import {
@@ -114,6 +117,11 @@ export default async function DashboardPage() {
     },
   ].filter((card) => card.value !== null);
 
+  const hoje = hojeUtc();
+  const ocupacao = perms.has("availability.view")
+    ? await getResumoOcupacao(actor, hoje, addDias(hoje, 21))
+    : [];
+
   return (
     <div className="space-y-6">
       <div>
@@ -153,6 +161,56 @@ export default async function DashboardPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {ocupacao.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Ocupação das próximas 21 noites</CardTitle>
+            <CardDescription>
+              Noite sem diária publicada não vende (RN-011).{" "}
+              <Link href="/calendario" className="underline underline-offset-4">
+                Abrir calendário
+              </Link>
+              {" · "}
+              <Link href="/tarifas" className="underline underline-offset-4">
+                Cobertura de tarifas
+              </Link>
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto text-sm">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-left text-muted-foreground">
+                    <th className="pb-2 font-medium">Unidade</th>
+                    <th className="pb-2 font-medium">Ocupadas</th>
+                    <th className="pb-2 font-medium">Sem tarifa</th>
+                    <th className="pb-2 font-medium">Vendáveis</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ocupacao.map((u) => (
+                    <tr key={u.unitId} className="border-t">
+                      <td className="py-2">
+                        <Link
+                          href={`/calendario`}
+                          className="font-medium underline-offset-4 hover:underline"
+                        >
+                          {u.internalCode}
+                        </Link>
+                        <div className="text-xs text-muted-foreground">{u.propertyName}</div>
+                      </td>
+                      <td className="py-2 tabular-nums">{u.ocupadas}/{u.noites}</td>
+                      <td className="py-2 tabular-nums text-amber-700">{u.semTarifa}</td>
+                      <td className="py-2 tabular-nums">{u.vendaveis}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

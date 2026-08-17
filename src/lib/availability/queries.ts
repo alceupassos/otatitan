@@ -33,6 +33,8 @@ export type LinhaCalendario = {
   propertyName: string;
   /** Ocupação por data (`YYYY-MM-DD` → dia ocupado). */
   ocupacao: Map<string, OcupacaoDia>;
+  /** Noites da janela SEM `DailyRate` aberta (RN-011 — não vendem). */
+  semTarifa: Set<string>;
 };
 
 export async function getCalendario(
@@ -122,14 +124,35 @@ export async function getCalendario(
         }
       }
 
-      return units.map((u) => ({
-        unitId: u.id,
-        unitName: u.name,
-        internalCode: u.internalCode,
-        propertyId: u.propertyId,
-        propertyName: u.property.name,
-        ocupacao: porUnidade.get(u.id)!,
-      }));
+      const tarifas = await tx.dailyRate.findMany({
+        where: {
+          unitId: { in: units.map((u) => u.id) },
+          date: { gte: inicio, lt: fim },
+          isClosed: false,
+          ratePlan: { status: "ACTIVE" },
+        },
+        select: { unitId: true, date: true },
+      });
+      const cobertos = new Map<string, Set<string>>();
+      for (const u of units) cobertos.set(u.id, new Set());
+      for (const t of tarifas) {
+        cobertos.get(t.unitId)?.add(toDateOnly(t.date));
+      }
+      const janela = diasNoIntervalo(inicio, fim).map(toDateOnly);
+
+      return units.map((u) => {
+        const comTarifa = cobertos.get(u.id) ?? new Set();
+        const semTarifa = new Set(janela.filter((d) => !comTarifa.has(d)));
+        return {
+          unitId: u.id,
+          unitName: u.name,
+          internalCode: u.internalCode,
+          propertyId: u.propertyId,
+          propertyName: u.property.name,
+          ocupacao: porUnidade.get(u.id)!,
+          semTarifa,
+        };
+      });
     },
   );
 }
@@ -151,4 +174,46 @@ export async function listUnitsParaBloqueio(actor: ActorContext) {
       orderBy: [{ property: { name: "asc" } }, { internalCode: "asc" }],
     }),
   );
+}
+
+export type ResumoOcupacaoUnidade = {
+  unitId: string;
+  internalCode: string;
+  propertyName: string;
+  noites: number;
+  ocupadas: number;
+  semTarifa: number;
+  vendaveis: number;
+};
+
+/**
+ * Visão compacta: nas próximas N noites, o que está ocupado, o que está
+ * sem diária (não vende) e o que de fato pode ser vendido.
+ */
+export async function getResumoOcupacao(
+  actor: ActorContext,
+  inicio: Date,
+  fim: Date,
+): Promise<ResumoOcupacaoUnidade[]> {
+  const linhas = await getCalendario(actor, inicio, fim);
+  const noites = diasNoIntervalo(inicio, fim).map(toDateOnly);
+  return linhas.map((l) => {
+    let ocupadas = 0;
+    let semTarifa = 0;
+    let vendaveis = 0;
+    for (const d of noites) {
+      if (l.ocupacao.has(d)) ocupadas++;
+      else if (l.semTarifa.has(d)) semTarifa++;
+      else vendaveis++;
+    }
+    return {
+      unitId: l.unitId,
+      internalCode: l.internalCode,
+      propertyName: l.propertyName,
+      noites: noites.length,
+      ocupadas,
+      semTarifa,
+      vendaveis,
+    };
+  });
 }

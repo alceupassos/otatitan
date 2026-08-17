@@ -1,43 +1,95 @@
 {
-  "_fonte": "angra/madre914/predio/madre914.html — documento de produto v2.0",
-  "_nota": "Diária base, taxa de limpeza, área e capacidade NÃO constam no documento. Ficaram sem valor (ou no mínimo aceito) de propósito — inventar número e apresentar como real seria pior que deixar em branco. Endereço: o documento só informa São Paulo; rua, número e CEP precisam ser confirmados.",
+  "_fonte": "Site público ao vivo https://www.madre914.com.br (consultado em 2026-08-17) e páginas /politicas/*. O documento antigo angra/madre914/predio/madre914.html descrevia 40 apartamentos DRAFT e não reflete a operação.",
+  "_nota": "Operação real: 4 studios (312, 409, 506, 609). Diária base, CEP e taxa de limpeza NÃO são publicados no site — ficam em branco / zero de propósito. Não inventar cotação. Taxas de PET (R$80/estadia), garagem (R$50/estadia) e hóspede extra a partir do 3º (R$40/noite) vivem no canal direto (src/lib/direct-booking/config.ts), copiadas do site ao vivo, não como diária da unidade. Distâncias em km/minutos o próprio site diz que ainda não foram medidas.",
+  "arquivarUnidadesAusentes": true,
   "imovel": {
     "name": "MADRE 914",
     "type": "CONDO",
-    "status": "DRAFT",
-    "description": "Prédio de 200 apartamentos operado como um único sistema: check-in sem recepção física, serviços sob demanda e entrega interna em menos de 10 minutos. Fase 1 opera 40 apartamentos. Cobertura com rooftop reservável; térreo com hub operacional (dark store, lockers, base de copeira e técnico); portaria com recepção virtual 24/7.",
-    "addressLine1": "",
+    "status": "ACTIVE",
+    "description": "Studios de 40 m² para até 6 pessoas na Av. Paes de Barros, 1179, Mooca, São Paulo. Prédio recém-entregue. Reserva direta, sem intermediário, com instruções de entrada pelo WhatsApp. 2 camas de casal + sofá-cama. PETs aceitos. Algumas unidades do edifício ainda estão em montagem — pode haver movimento em horário comercial.",
+    "addressLine1": "Av. Paes de Barros, 1179",
     "addressLine2": "",
-    "neighborhood": "",
+    "neighborhood": "Mooca",
     "city": "São Paulo",
     "state": "SP",
     "postalCode": "",
     "checkInTime": "15:00",
     "checkOutTime": "11:00",
-    "houseRules": "Check-in automático por totem com reconhecimento facial. Fechadura inteligente por reserva. Concierge por vídeo disponível 24/7. SLA de manutenção: 1 hora."
+    "houseRules": "Não se fuma dentro do apartamento. Constatado fumo, é cobrada a higienização de R$ 600,00 (cigarro, vape e narguilé, em qualquer ambiente da unidade). Ocupação de até 6 hóspedes; todos cadastrados antes da chegada — pessoas não cadastradas não entram no prédio. Silêncio das 22h às 8h. Festas e eventos não são permitidos. Entrada a partir das 15h, saída até as 11h. Obra em andamento: algumas unidades do prédio ainda estão em montagem e pode haver ruído em horário comercial. PETs: até 2 animais, taxa informada no orçamento; o hóspede responde por danos e não deixa o animal sozinho na unidade."
   },
   "comodidades": [
     "wifi",
     "ar-condicionado",
+    "tv-smart",
+    "roupa-de-cama",
+    "cozinha-equipada",
+    "academia",
+    "maquina-lavar",
     "elevador",
-    "portaria-24h"
+    "portaria-24h",
+    "pet-friendly",
+    "estacionamento"
   ],
-  "gerarUnidades": {
-    "andares": [2, 3, 4, 5],
-    "porAndar": 10,
-    "prefixoCodigo": "M914-",
-    "nomeTemplate": "Apartamento {numero}",
-    "padrao": {
-      "status": "DRAFT",
-      "maxGuests": "2",
-      "bedrooms": "1",
-      "beds": "1",
+  "unidades": [
+    {
+      "internalCode": "312",
+      "name": "Studio 312",
+      "floor": "3",
+      "status": "ACTIVE",
+      "maxGuests": "6",
+      "bedrooms": "0",
+      "beds": "3",
       "bathrooms": "1",
-      "sizeM2": "",
+      "sizeM2": "40",
       "baseRateCents": "",
       "cleaningFeeCents": "0",
-      "minNights": "1",
-      "maxNights": ""
+      "minNights": "2",
+      "maxNights": "90"
+    },
+    {
+      "internalCode": "409",
+      "name": "Studio 409",
+      "floor": "4",
+      "status": "ACTIVE",
+      "maxGuests": "6",
+      "bedrooms": "0",
+      "beds": "3",
+      "bathrooms": "1",
+      "sizeM2": "40",
+      "baseRateCents": "",
+      "cleaningFeeCents": "0",
+      "minNights": "2",
+      "maxNights": "90"
+    },
+    {
+      "internalCode": "506",
+      "name": "Studio 506",
+      "floor": "5",
+      "status": "ACTIVE",
+      "maxGuests": "6",
+      "bedrooms": "0",
+      "beds": "3",
+      "bathrooms": "1",
+      "sizeM2": "40",
+      "baseRateCents": "",
+      "cleaningFeeCents": "0",
+      "minNights": "2",
+      "maxNights": "90"
+    },
+    {
+      "internalCode": "609",
+      "name": "Studio 609",
+      "floor": "6",
+      "status": "ACTIVE",
+      "maxGuests": "6",
+      "bedrooms": "0",
+      "beds": "3",
+      "bathrooms": "1",
+      "sizeM2": "40",
+      "baseRateCents": "",
+      "cleaningFeeCents": "0",
+      "minNights": "2",
+      "maxNights": "90"
     }
-  }
+  ]
 }

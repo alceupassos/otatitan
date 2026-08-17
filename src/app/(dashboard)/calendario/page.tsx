@@ -123,8 +123,8 @@ export default async function CalendarioPage({
         <GradeCalendario
           linhas={linhas.map((l) => ({
             ...l,
-            // Map não atravessa a fronteira servidor→cliente; vira objeto.
             ocupacao: Object.fromEntries(l.ocupacao),
+            semTarifa: [...l.semTarifa],
           }))}
           dias={dias.map(toDateOnly)}
           hoje={toDateOnly(hojeUtc())}

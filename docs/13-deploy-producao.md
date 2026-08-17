@@ -83,7 +83,34 @@ de se declarar concluído.
 - **HSTS fica no nginx**, onde o TLS termina. Os demais cabeçalhos de
   segurança (`X-Content-Type-Options`, `X-Frame-Options`,
   `Referrer-Policy`, `Permissions-Policy`) vêm da aplicação, em
-  `next.config.ts`.
+  `next.config.ts`. O canal direto precisa de `camera=(self)` para a foto
+  do responsável; o painel não usa câmera, mas a política é a mesma no
+  app (só este origin).
+
+## Canal direto Madre 914
+
+O site público `www.madre914.com.br` passa a ser o **mesmo app** na porta
+3040, distinguido pelo `Host`. O painel continua em
+`otatitan.giannasiadvogados.com.br`.
+
+1. Preencher `DIRECT_BOOKING_TENANT_SLUG` (slug da empresa no banco) e
+   importar os 4 studios: `scripts/data/madre914.json`.
+2. Habilitar o vhost (preencha `ssl_certificate*` com o par **já
+   instalado** da zona madre914 — o curinga de giannasiadvogados.com.br
+   não cobre este nome; não inventamos IP):
+
+   ```sh
+   cp infra/nginx/madre914.com.br.conf \
+      /etc/nginx/sites-available/madre914.com.br
+   ln -sf /etc/nginx/sites-available/madre914.com.br \
+          /etc/nginx/sites-enabled/
+   nginx -t && systemctl reload nginx
+   ```
+3. No Cloudflare da zona madre914, o origin continua sendo este nginx.
+
+O site ao vivo consultado em 2026-08-17 era **outro** app Next.js (`/api/health`
+devolvia `db`+`latencyMs`; este repo devolve só `{status}`). Esta entrega
+unifica o canal neste repositório.
 
 ## Armadilha: a chave do Asaas começa com `$`
 

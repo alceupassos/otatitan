@@ -52,3 +52,6 @@ next-env.d.ts
 /playwright-report/
 *.png
 !/public/**/*.png
+
+# mídia local quando S3/MinIO não está configurado
+/uploads/

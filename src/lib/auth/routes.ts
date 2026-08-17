@@ -25,6 +25,7 @@ export const PUBLIC_PREFIXES = [
   "/esqueci-senha",
   "/redefinir-senha",
   "/stays",
+  "/politicas",
   "/api/auth",
   "/api/webhooks",
   "/api/health",

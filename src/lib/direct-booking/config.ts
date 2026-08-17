@@ -55,18 +55,21 @@ export const MADRE914 = {
       alt: "Placa do edifício Madre 914",
       width: 960,
       height: 1280,
+      cover: false,
     },
     {
       src: "/fotos/lobby-estar.jpg",
       alt: "Hall de entrada com estar",
       width: 576,
       height: 768,
+      cover: false,
     },
     {
       src: "/fotos/lobby-corredor.jpg",
       alt: "Corredor do edifício",
       width: 576,
       height: 768,
+      cover: false,
     },
   ],
   /**
@@ -146,7 +149,7 @@ export const MADRE914 = {
   ],
 } as const;
 
-export function whatsappUrl(texto = MADRE914.whatsappMessage): string {
+export function whatsappUrl(texto: string = MADRE914.whatsappMessage): string {
   return `https://wa.me/${MADRE914.whatsapp}?text=${encodeURIComponent(texto)}`;
 }
 
